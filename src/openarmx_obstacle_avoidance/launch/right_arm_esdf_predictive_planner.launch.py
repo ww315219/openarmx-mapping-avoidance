@@ -1,0 +1,80 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("urdf_path", default_value=""),
+            DeclareLaunchArgument("robot_description_node", default_value="/robot_state_publisher"),
+            DeclareLaunchArgument("command_message_type", default_value="float64_multi_array"),
+            DeclareLaunchArgument("input_command_topic", default_value="/right_teleop_baseline/commands"),
+            DeclareLaunchArgument("output_command_topic", default_value="/right_teleop_planned/commands"),
+            DeclareLaunchArgument("joint_states_topic", default_value="/joint_states"),
+            DeclareLaunchArgument("esdf_service", default_value=""),
+            DeclareLaunchArgument("global_frame", default_value="world"),
+            DeclareLaunchArgument("rate_hz", default_value="10.0"),
+            DeclareLaunchArgument("horizon_steps", default_value="6"),
+            DeclareLaunchArgument("horizon_dt", default_value="0.1"),
+            DeclareLaunchArgument("esdf_update_hz", default_value="6.0"),
+            DeclareLaunchArgument("request_update_esdf", default_value="true"),
+            DeclareLaunchArgument("nearest_observed_search_radius", default_value="0.12"),
+            DeclareLaunchArgument("monitor_only", default_value="false"),
+            DeclareLaunchArgument("safety_margin", default_value="0.02"),
+            DeclareLaunchArgument("activation_margin", default_value="0.12"),
+            DeclareLaunchArgument("track_weight", default_value="1.0"),
+            DeclareLaunchArgument("obstacle_weight", default_value="1.0"),
+            DeclareLaunchArgument("damping", default_value="0.05"),
+            DeclareLaunchArgument("correction_alpha", default_value="0.6"),
+            DeclareLaunchArgument("plan_delta_filter_alpha", default_value="0.35"),
+            DeclareLaunchArgument("inactive_delta_decay", default_value="0.45"),
+            DeclareLaunchArgument("active_hold_cycles", default_value="3"),
+            DeclareLaunchArgument("max_plan_delta_per_joint", default_value="0.06"),
+            DeclareLaunchArgument("max_command_step", default_value="0.06"),
+            DeclareLaunchArgument("qdot_filter_alpha", default_value="0.35"),
+            DeclareLaunchArgument("qdot_limit", default_value="1.2"),
+            DeclareLaunchArgument("aabb_padding", default_value="0.25"),
+            Node(
+                package="openarmx_obstacle_avoidance",
+                executable="right_arm_esdf_predictive_planner",
+                name="right_arm_esdf_predictive_planner",
+                output="screen",
+                additional_env={"PYTHONNOUSERSITE": "1"},
+                parameters=[
+                    {
+                        "urdf_path": LaunchConfiguration("urdf_path"),
+                        "robot_description_node": LaunchConfiguration("robot_description_node"),
+                        "command_message_type": LaunchConfiguration("command_message_type"),
+                        "input_command_topic": LaunchConfiguration("input_command_topic"),
+                        "output_command_topic": LaunchConfiguration("output_command_topic"),
+                        "joint_states_topic": LaunchConfiguration("joint_states_topic"),
+                        "esdf_service": LaunchConfiguration("esdf_service"),
+                        "global_frame": LaunchConfiguration("global_frame"),
+                        "rate_hz": LaunchConfiguration("rate_hz"),
+                        "horizon_steps": LaunchConfiguration("horizon_steps"),
+                        "horizon_dt": LaunchConfiguration("horizon_dt"),
+                        "esdf_update_hz": LaunchConfiguration("esdf_update_hz"),
+                        "request_update_esdf": LaunchConfiguration("request_update_esdf"),
+                        "nearest_observed_search_radius": LaunchConfiguration("nearest_observed_search_radius"),
+                        "monitor_only": LaunchConfiguration("monitor_only"),
+                        "safety_margin": LaunchConfiguration("safety_margin"),
+                        "activation_margin": LaunchConfiguration("activation_margin"),
+                        "track_weight": LaunchConfiguration("track_weight"),
+                        "obstacle_weight": LaunchConfiguration("obstacle_weight"),
+                        "damping": LaunchConfiguration("damping"),
+                        "correction_alpha": LaunchConfiguration("correction_alpha"),
+                        "plan_delta_filter_alpha": LaunchConfiguration("plan_delta_filter_alpha"),
+                        "inactive_delta_decay": LaunchConfiguration("inactive_delta_decay"),
+                        "active_hold_cycles": LaunchConfiguration("active_hold_cycles"),
+                        "max_plan_delta_per_joint": LaunchConfiguration("max_plan_delta_per_joint"),
+                        "max_command_step": LaunchConfiguration("max_command_step"),
+                        "qdot_filter_alpha": LaunchConfiguration("qdot_filter_alpha"),
+                        "qdot_limit": LaunchConfiguration("qdot_limit"),
+                        "aabb_padding": LaunchConfiguration("aabb_padding"),
+                    }
+                ],
+            ),
+        ]
+    )

@@ -1,0 +1,81 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("depth_topic", default_value="/foundation_stereo/depth"),
+            DeclareLaunchArgument("camera_info_topic", default_value="/camera/infra1/camera_info"),
+            DeclareLaunchArgument("output_depth_topic", default_value="/perception/cable_depth"),
+            DeclareLaunchArgument("output_camera_info_topic", default_value="/perception/cable_depth/camera_info"),
+            DeclareLaunchArgument("output_mask_topic", default_value="/perception/cable_mask"),
+            DeclareLaunchArgument("output_encoding", default_value="32FC1"),
+            DeclareLaunchArgument("z_min", default_value="0.15"),
+            DeclareLaunchArgument("z_max", default_value="2.0"),
+            DeclareLaunchArgument("median_blur_ksize", default_value="3"),
+            DeclareLaunchArgument("morph_close_px", default_value="0"),
+            DeclareLaunchArgument("remove_thick_regions", default_value="true"),
+            DeclareLaunchArgument("max_cable_half_width_px", default_value="6.0"),
+            DeclareLaunchArgument("thick_region_dilate_px", default_value="8"),
+            DeclareLaunchArgument("min_line_length_px", default_value="80"),
+            DeclareLaunchArgument("max_line_gap_px", default_value="35"),
+            DeclareLaunchArgument("hough_threshold", default_value="20"),
+            DeclareLaunchArgument("line_thickness_px", default_value="5"),
+            DeclareLaunchArgument("line_mask_dilate_px", default_value="2"),
+            DeclareLaunchArgument("fill_depth_gaps", default_value="true"),
+            DeclareLaunchArgument("depth_gap_close_px", default_value="4"),
+            DeclareLaunchArgument("max_depth_fill_distance_px", default_value="12"),
+            DeclareLaunchArgument("use_component_fallback", default_value="true"),
+            DeclareLaunchArgument("component_min_area_px", default_value="20"),
+            DeclareLaunchArgument("component_max_area_px", default_value="5000"),
+            DeclareLaunchArgument("component_min_aspect", default_value="3.0"),
+            DeclareLaunchArgument("component_max_minor_px", default_value="22"),
+            DeclareLaunchArgument("remove_large_blobs", default_value="true"),
+            DeclareLaunchArgument("large_blob_min_area_px", default_value="3000"),
+            DeclareLaunchArgument("large_blob_max_aspect", default_value="1.8"),
+            DeclareLaunchArgument("large_blob_min_minor_px", default_value="28"),
+            Node(
+                package="openarmx_nvblox_bringup",
+                executable="cable_depth_filter_node.py",
+                name="cable_depth_filter",
+                output="screen",
+                parameters=[
+                    {
+                        "depth_topic": LaunchConfiguration("depth_topic"),
+                        "camera_info_topic": LaunchConfiguration("camera_info_topic"),
+                        "output_depth_topic": LaunchConfiguration("output_depth_topic"),
+                        "output_camera_info_topic": LaunchConfiguration("output_camera_info_topic"),
+                        "output_mask_topic": LaunchConfiguration("output_mask_topic"),
+                        "output_encoding": LaunchConfiguration("output_encoding"),
+                        "z_min": LaunchConfiguration("z_min"),
+                        "z_max": LaunchConfiguration("z_max"),
+                        "median_blur_ksize": LaunchConfiguration("median_blur_ksize"),
+                        "morph_close_px": LaunchConfiguration("morph_close_px"),
+                        "remove_thick_regions": LaunchConfiguration("remove_thick_regions"),
+                        "max_cable_half_width_px": LaunchConfiguration("max_cable_half_width_px"),
+                        "thick_region_dilate_px": LaunchConfiguration("thick_region_dilate_px"),
+                        "min_line_length_px": LaunchConfiguration("min_line_length_px"),
+                        "max_line_gap_px": LaunchConfiguration("max_line_gap_px"),
+                        "hough_threshold": LaunchConfiguration("hough_threshold"),
+                        "line_thickness_px": LaunchConfiguration("line_thickness_px"),
+                        "line_mask_dilate_px": LaunchConfiguration("line_mask_dilate_px"),
+                        "fill_depth_gaps": LaunchConfiguration("fill_depth_gaps"),
+                        "depth_gap_close_px": LaunchConfiguration("depth_gap_close_px"),
+                        "max_depth_fill_distance_px": LaunchConfiguration("max_depth_fill_distance_px"),
+                        "use_component_fallback": LaunchConfiguration("use_component_fallback"),
+                        "component_min_area_px": LaunchConfiguration("component_min_area_px"),
+                        "component_max_area_px": LaunchConfiguration("component_max_area_px"),
+                        "component_min_aspect": LaunchConfiguration("component_min_aspect"),
+                        "component_max_minor_px": LaunchConfiguration("component_max_minor_px"),
+                        "remove_large_blobs": LaunchConfiguration("remove_large_blobs"),
+                        "large_blob_min_area_px": LaunchConfiguration("large_blob_min_area_px"),
+                        "large_blob_max_aspect": LaunchConfiguration("large_blob_max_aspect"),
+                        "large_blob_min_minor_px": LaunchConfiguration("large_blob_min_minor_px"),
+                    }
+                ],
+            ),
+        ]
+    )
