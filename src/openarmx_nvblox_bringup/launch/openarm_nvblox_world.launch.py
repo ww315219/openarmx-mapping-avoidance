@@ -11,6 +11,17 @@ import os
 def generate_launch_description():
     depth_topic = LaunchConfiguration("depth_topic")
     depth_camera_info_topic = LaunchConfiguration("depth_camera_info_topic")
+    run_fixed_cable_depth_mask = LaunchConfiguration("run_fixed_cable_depth_mask")
+    cable_removed_depth_topic = LaunchConfiguration("cable_removed_depth_topic")
+    cable_removed_camera_info_topic = LaunchConfiguration(
+        "cable_removed_camera_info_topic"
+    )
+    cable_depth_mask_topic = LaunchConfiguration("cable_depth_mask_topic")
+    cable_depth_mask_radius_m = LaunchConfiguration("cable_depth_mask_radius_m")
+    cable_depth_mask_tolerance_m = LaunchConfiguration("cable_depth_mask_tolerance_m")
+    cable_depth_mask_sample_spacing_m = LaunchConfiguration(
+        "cable_depth_mask_sample_spacing_m"
+    )
     run_depth_freeze_gate = LaunchConfiguration("run_depth_freeze_gate")
     frozen_depth_topic = LaunchConfiguration("frozen_depth_topic")
     frozen_depth_camera_info_topic = LaunchConfiguration("frozen_depth_camera_info_topic")
@@ -27,8 +38,21 @@ def generate_launch_description():
     semantic_robot_radius_scale = LaunchConfiguration("semantic_robot_radius_scale")
     run_rviz = LaunchConfiguration("run_rviz")
     run_cable_capsules = LaunchConfiguration("run_cable_capsules")
+    run_rolling_object_voxels = LaunchConfiguration("run_rolling_object_voxels")
+    rolling_object_pointcloud_topic = LaunchConfiguration(
+        "rolling_object_pointcloud_topic"
+    )
+    rolling_object_voxel_topic = LaunchConfiguration("rolling_object_voxel_topic")
+    rolling_object_voxel_size_m = LaunchConfiguration("rolling_object_voxel_size_m")
+    rolling_object_voxel_ttl_s = LaunchConfiguration("rolling_object_voxel_ttl_s")
+    rolling_object_max_depth_m = LaunchConfiguration("rolling_object_max_depth_m")
+    rolling_object_cable_exclusion_padding_m = LaunchConfiguration(
+        "rolling_object_cable_exclusion_padding_m"
+    )
+    run_protected_cable_interface = LaunchConfiguration("run_protected_cable_interface")
     run_robot_esdf_clearer = LaunchConfiguration("run_robot_esdf_clearer")
     run_visual_cues = LaunchConfiguration("run_visual_cues")
+    run_untangle_preview = LaunchConfiguration("run_untangle_preview")
     visual_cues_active_arm = LaunchConfiguration("visual_cues_active_arm")
     visual_cues_left_desired_pose_topic = LaunchConfiguration(
         "visual_cues_left_desired_pose_topic"
@@ -57,6 +81,39 @@ def generate_launch_description():
     visual_cues_assist_max_alpha = LaunchConfiguration("visual_cues_assist_max_alpha")
     visual_cues_assist_ramp_duration = LaunchConfiguration("visual_cues_assist_ramp_duration")
     visual_cues_pointcloud_topic = LaunchConfiguration("visual_cues_pointcloud_topic")
+    visual_cues_target_selection_mode = LaunchConfiguration(
+        "visual_cues_target_selection_mode"
+    )
+    visual_cues_nearest_target_radius = LaunchConfiguration(
+        "visual_cues_nearest_target_radius"
+    )
+    visual_cues_nearest_target_min_distance = LaunchConfiguration(
+        "visual_cues_nearest_target_min_distance"
+    )
+    visual_cues_nearest_target_forward_only = LaunchConfiguration(
+        "visual_cues_nearest_target_forward_only"
+    )
+    visual_cues_nearest_target_min_forward_distance = LaunchConfiguration(
+        "visual_cues_nearest_target_min_forward_distance"
+    )
+    visual_cues_nearest_target_lateral_radius = LaunchConfiguration(
+        "visual_cues_nearest_target_lateral_radius"
+    )
+    visual_cues_nearest_target_support_radius = LaunchConfiguration(
+        "visual_cues_nearest_target_support_radius"
+    )
+    visual_cues_nearest_target_min_points = LaunchConfiguration(
+        "visual_cues_nearest_target_min_points"
+    )
+    visual_cues_nearest_target_lock_delay_s = LaunchConfiguration(
+        "visual_cues_nearest_target_lock_delay_s"
+    )
+    visual_cues_nearest_target_self_filter_hand_radius = LaunchConfiguration(
+        "visual_cues_nearest_target_self_filter_hand_radius"
+    )
+    visual_cues_nearest_target_self_filter_padding = LaunchConfiguration(
+        "visual_cues_nearest_target_self_filter_padding"
+    )
     visual_cues_left_gripper_topic = LaunchConfiguration("visual_cues_left_gripper_topic")
     visual_cues_right_gripper_topic = LaunchConfiguration("visual_cues_right_gripper_topic")
     visual_cues_ray_length = LaunchConfiguration("visual_cues_ray_length")
@@ -146,7 +203,32 @@ def generate_launch_description():
     )
     robot_clearer_debug_markers = LaunchConfiguration("robot_clearer_debug_markers")
     cable_capsule_topic = LaunchConfiguration("cable_capsule_topic")
+    protected_cable_ground_truth_pose_array_topic = LaunchConfiguration(
+        "protected_cable_ground_truth_pose_array_topic"
+    )
+    protected_cable_use_ground_truth_as_estimate = LaunchConfiguration(
+        "protected_cable_use_ground_truth_as_estimate"
+    )
+    protected_cable_ground_truth_topic = LaunchConfiguration(
+        "protected_cable_ground_truth_topic"
+    )
+    protected_cable_estimate_topic = LaunchConfiguration("protected_cable_estimate_topic")
+    protected_cable_estimate_source = LaunchConfiguration("protected_cable_estimate_source")
+    protected_cable_translation_bias_m = LaunchConfiguration(
+        "protected_cable_translation_bias_m"
+    )
+    protected_cable_rotation_bias_deg = LaunchConfiguration(
+        "protected_cable_rotation_bias_deg"
+    )
+    protected_cable_position_noise_std_m = LaunchConfiguration(
+        "protected_cable_position_noise_std_m"
+    )
+    protected_cable_latency_ms = LaunchConfiguration("protected_cable_latency_ms")
+    protected_cable_dropout_probability = LaunchConfiguration(
+        "protected_cable_dropout_probability"
+    )
     cable_capsule_source_mode = LaunchConfiguration("cable_capsule_source_mode")
+    cable_capsule_fixed_file = LaunchConfiguration("cable_capsule_fixed_file")
     cable_capsule_pointcloud_topic = LaunchConfiguration("cable_capsule_pointcloud_topic")
     cable_capsule_mesh_topic = LaunchConfiguration("cable_capsule_mesh_topic")
     cable_capsule_voxel_layer_topic = LaunchConfiguration("cable_capsule_voxel_layer_topic")
@@ -203,6 +285,20 @@ def generate_launch_description():
     cable_capsule_ema_alpha = LaunchConfiguration("cable_capsule_ema_alpha")
     cable_capsule_hold_cycles = LaunchConfiguration("cable_capsule_hold_cycles")
     cable_capsule_ransac_fallback_enabled = LaunchConfiguration("cable_capsule_ransac_fallback_enabled")
+    cable_capsule_freeze = LaunchConfiguration("cable_capsule_freeze")
+    cable_capsule_freeze_delay_s = LaunchConfiguration("cable_capsule_freeze_delay_s")
+    cable_capsule_freeze_stable_cycles = LaunchConfiguration("cable_capsule_freeze_stable_cycles")
+    cable_capsule_freeze_stability_tolerance_m = LaunchConfiguration(
+        "cable_capsule_freeze_stability_tolerance_m"
+    )
+    cable_capsule_left_z_offset = LaunchConfiguration("cable_capsule_left_z_offset")
+    cable_capsule_right_z_offset = LaunchConfiguration("cable_capsule_right_z_offset")
+    run_fixed_cable_voxel_clearer = LaunchConfiguration("run_fixed_cable_voxel_clearer")
+    cable_voxel_clear_delay_s = LaunchConfiguration("cable_voxel_clear_delay_s")
+    cable_voxel_clear_radius_m = LaunchConfiguration("cable_voxel_clear_radius_m")
+    cable_voxel_clear_sample_spacing_m = LaunchConfiguration(
+        "cable_voxel_clear_sample_spacing_m"
+    )
 
     camera_x = LaunchConfiguration("camera_x")
     camera_y = LaunchConfiguration("camera_y")
@@ -324,8 +420,8 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "input_depth_topic": depth_topic,
-                "input_camera_info_topic": depth_camera_info_topic,
+                "input_depth_topic": cable_removed_depth_topic,
+                "input_camera_info_topic": cable_removed_camera_info_topic,
                 "output_depth_topic": semantic_obstacle_depth_topic,
                 "output_camera_info_topic": semantic_obstacle_camera_info_topic,
                 "output_robot_mask_topic": semantic_robot_mask_topic,
@@ -350,8 +446,8 @@ def generate_launch_description():
         output="screen",
         parameters=[
             {
-                "input_depth_topic": depth_topic,
-                "input_camera_info_topic": depth_camera_info_topic,
+                "input_depth_topic": cable_removed_depth_topic,
+                "input_camera_info_topic": cable_removed_camera_info_topic,
                 "output_depth_topic": frozen_depth_topic,
                 "output_camera_info_topic": frozen_depth_camera_info_topic,
                 "freeze_after_s": depth_freeze_after_s,
@@ -387,8 +483,8 @@ def generate_launch_description():
         parameters=[config_path],
         arguments=["--ros-args", "--log-level", log_level],
         remappings=[
-            ("camera_0/depth/image", depth_topic),
-            ("camera_0/depth/camera_info", depth_camera_info_topic),
+            ("camera_0/depth/image", cable_removed_depth_topic),
+            ("camera_0/depth/camera_info", cable_removed_camera_info_topic),
         ],
         condition=raw_direct_condition,
     )
@@ -435,6 +531,28 @@ def generate_launch_description():
         condition=semantic_frozen_condition,
     )
 
+    fixed_cable_depth_mask_node = Node(
+        package="openarmx_nvblox_bringup",
+        executable="fixed_cable_depth_mask_node.py",
+        name="fixed_cable_depth_mask",
+        output="screen",
+        parameters=[
+            {
+                "enabled": run_fixed_cable_depth_mask,
+                "input_depth_topic": depth_topic,
+                "input_camera_info_topic": depth_camera_info_topic,
+                "capsule_topic": cable_capsule_topic,
+                "output_depth_topic": cable_removed_depth_topic,
+                "output_camera_info_topic": cable_removed_camera_info_topic,
+                "output_mask_topic": cable_depth_mask_topic,
+                "mask_radius_m": cable_depth_mask_radius_m,
+                "depth_tolerance_m": cable_depth_mask_tolerance_m,
+                "sample_spacing_m": cable_depth_mask_sample_spacing_m,
+                "hold_until_ready": True,
+            }
+        ],
+    )
+
     cable_capsule_marker_node = Node(
         package="openarmx_nvblox_bringup",
         executable="cable_capsule_marker_node.py",
@@ -443,6 +561,7 @@ def generate_launch_description():
         parameters=[
             {
                 "source_mode": cable_capsule_source_mode,
+                "fixed_capsule_file": cable_capsule_fixed_file,
                 "depth_topic": depth_topic,
                 "camera_info_topic": depth_camera_info_topic,
                 "pointcloud_topic": cable_capsule_pointcloud_topic,
@@ -493,9 +612,78 @@ def generate_launch_description():
                 "capsule_ema_alpha": cable_capsule_ema_alpha,
                 "capsule_hold_cycles": cable_capsule_hold_cycles,
                 "ransac_fallback_enabled": cable_capsule_ransac_fallback_enabled,
+                "freeze_capsules": cable_capsule_freeze,
+                "freeze_min_capsules": 2,
+                "freeze_delay_s": cable_capsule_freeze_delay_s,
+                "freeze_stable_cycles": cable_capsule_freeze_stable_cycles,
+                "freeze_stability_tolerance_m": cable_capsule_freeze_stability_tolerance_m,
+                "left_capsule_z_offset": cable_capsule_left_z_offset,
+                "right_capsule_z_offset": cable_capsule_right_z_offset,
             }
         ],
         condition=IfCondition(run_cable_capsules),
+    )
+
+    rolling_object_voxel_node = Node(
+        package="openarmx_nvblox_bringup",
+        executable="rolling_object_voxel_node.py",
+        name="rolling_object_voxels",
+        output="screen",
+        parameters=[
+            {
+                "global_frame": world_frame,
+                "input_pointcloud_topic": rolling_object_pointcloud_topic,
+                "capsule_topic": cable_capsule_topic,
+                "output_marker_topic": rolling_object_voxel_topic,
+                "voxel_size_m": rolling_object_voxel_size_m,
+                "ttl_s": rolling_object_voxel_ttl_s,
+                "max_depth_m": rolling_object_max_depth_m,
+                "cable_exclusion_padding_m": rolling_object_cable_exclusion_padding_m,
+            }
+        ],
+        condition=IfCondition(run_rolling_object_voxels),
+    )
+
+    fixed_cable_voxel_clearer_node = Node(
+        package="openarmx_nvblox_bringup",
+        executable="fixed_cable_voxel_clearer_node.py",
+        name="fixed_cable_voxel_clearer",
+        output="screen",
+        parameters=[
+            {
+                "capsule_topic": cable_capsule_topic,
+                "esdf_service": "/nvblox_node/get_esdf_and_gradients",
+                "global_frame": world_frame,
+                "clear_delay_s": cable_voxel_clear_delay_s,
+                "clear_radius_m": cable_voxel_clear_radius_m,
+                "sample_spacing_m": cable_voxel_clear_sample_spacing_m,
+            }
+        ],
+        condition=IfCondition(run_fixed_cable_voxel_clearer),
+    )
+
+    protected_cable_interface_node = Node(
+        package="openarmx_nvblox_bringup",
+        executable="protected_cable_perturbation_node.py",
+        name="protected_cable_perturbation",
+        output="screen",
+        parameters=[
+            {
+                "input_marker_topic": cable_capsule_topic,
+                "ground_truth_pose_array_topic": protected_cable_ground_truth_pose_array_topic,
+                "use_ground_truth_as_estimate": protected_cable_use_ground_truth_as_estimate,
+                "ground_truth_topic": protected_cable_ground_truth_topic,
+                "estimate_topic": protected_cable_estimate_topic,
+                "source": protected_cable_estimate_source,
+                "translation_bias_m": protected_cable_translation_bias_m,
+                "rotation_bias_deg": protected_cable_rotation_bias_deg,
+                "gaussian_position_noise_std_m": protected_cable_position_noise_std_m,
+                "reported_position_std_m": protected_cable_position_noise_std_m,
+                "latency_ms": protected_cable_latency_ms,
+                "dropout_probability": protected_cable_dropout_probability,
+            }
+        ],
+        condition=IfCondition(run_protected_cable_interface),
     )
 
     robot_esdf_clearer_node = Node(
@@ -553,8 +741,27 @@ def generate_launch_description():
                 "assist_max_alpha": visual_cues_assist_max_alpha,
                 "assist_ramp_duration": visual_cues_assist_ramp_duration,
                 "ray_selection_enabled": True,
+                "target_selection_mode": visual_cues_target_selection_mode,
                 "show_rviz_selection_ray": visual_cues_show_rviz_selection_ray,
                 "pointcloud_topic": visual_cues_pointcloud_topic,
+                "nearest_target_radius": visual_cues_nearest_target_radius,
+                "nearest_target_min_distance": visual_cues_nearest_target_min_distance,
+                "nearest_target_forward_only": visual_cues_nearest_target_forward_only,
+                "nearest_target_min_forward_distance": (
+                    visual_cues_nearest_target_min_forward_distance
+                ),
+                "nearest_target_lateral_radius": (
+                    visual_cues_nearest_target_lateral_radius
+                ),
+                "nearest_target_support_radius": visual_cues_nearest_target_support_radius,
+                "nearest_target_min_points": visual_cues_nearest_target_min_points,
+                "nearest_target_lock_delay_s": visual_cues_nearest_target_lock_delay_s,
+                "nearest_target_self_filter_hand_radius": (
+                    visual_cues_nearest_target_self_filter_hand_radius
+                ),
+                "nearest_target_self_filter_padding": (
+                    visual_cues_nearest_target_self_filter_padding
+                ),
                 "left_gripper_topic": visual_cues_left_gripper_topic,
                 "right_gripper_topic": visual_cues_right_gripper_topic,
                 "ray_length": visual_cues_ray_length,
@@ -586,6 +793,7 @@ def generate_launch_description():
                 "target_lock_offset_y": visual_cues_target_lock_offset_y,
                 "target_lock_offset_z": visual_cues_target_lock_offset_z,
                 "show_target_roi": visual_cues_show_target_roi,
+                "show_rviz_untangle_preview": False,
                 "cable_capsules_topic": visual_cues_cable_capsules_topic,
                 "exclude_cable_capsule_points": visual_cues_exclude_cable_capsule_points,
                 "cable_capsule_exclusion_padding": visual_cues_cable_capsule_exclusion_padding,
@@ -593,6 +801,27 @@ def generate_launch_description():
             }
         ],
         condition=IfCondition(run_visual_cues),
+    )
+
+    untangle_preview_node = Node(
+        package="openarmx_visual_cues",
+        executable="branch_untangle_preview",
+        name="branch_untangle_preview",
+        output="screen",
+        respawn=True,
+        respawn_delay=1.0,
+        additional_env={"PYTHONNOUSERSITE": "1"},
+        parameters=[
+            {
+                "global_frame": world_frame,
+                "active_arm": visual_cues_active_arm,
+                "left_start_pose_topic": visual_cues_left_desired_pose_topic,
+                "right_start_pose_topic": visual_cues_right_desired_pose_topic,
+                "cable_capsules_topic": visual_cues_cable_capsules_topic,
+                "auto_generate": True,
+            }
+        ],
+        condition=IfCondition(run_untangle_preview),
     )
 
     rviz_node = Node(
@@ -616,8 +845,39 @@ def generate_launch_description():
             description="CameraInfo matching the FFS depth image.",
         ),
         DeclareLaunchArgument(
-            "run_depth_freeze_gate",
+            "run_fixed_cable_depth_mask",
             default_value="true",
+            description=(
+                "Continuously remove only depth samples matching the persistent cable "
+                "capsules before nvblox. The rest of the scene keeps updating."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "cable_removed_depth_topic",
+            default_value="/perception/cable_removed_depth",
+        ),
+        DeclareLaunchArgument(
+            "cable_removed_camera_info_topic",
+            default_value="/perception/cable_removed_depth/camera_info",
+        ),
+        DeclareLaunchArgument(
+            "cable_depth_mask_topic",
+            default_value="/perception/fixed_cable_depth_mask",
+        ),
+        DeclareLaunchArgument(
+            "cable_depth_mask_radius_m",
+            default_value="0.03",
+            description="World-space radius of the cable depth exclusion tube.",
+        ),
+        DeclareLaunchArgument(
+            "cable_depth_mask_tolerance_m",
+            default_value="0.05",
+            description="Only remove measured depth within this distance of capsule depth.",
+        ),
+        DeclareLaunchArgument("cable_depth_mask_sample_spacing_m", default_value="0.012"),
+        DeclareLaunchArgument(
+            "run_depth_freeze_gate",
+            default_value="false",
             description="Forward depth to nvblox only for the first depth_freeze_after_s seconds.",
         ),
         DeclareLaunchArgument("frozen_depth_topic", default_value="/nvblox/frozen_depth"),
@@ -683,17 +943,32 @@ def generate_launch_description():
             default_value="square_test_world",
             description="Frame used by square_pose_input_node for /pico_*_controller/pose in square-test mode.",
         ),
-        DeclareLaunchArgument("camera_x", default_value="0.05"),
-        DeclareLaunchArgument("camera_y", default_value="0.0"),
+        DeclareLaunchArgument("camera_x", default_value="0.0"),
+        DeclareLaunchArgument(
+            "camera_y",
+            default_value="0.062638963",
+            description=(
+                "Measured lateral world offset that centers the two fixed cable capsules "
+                "about the robot mid-plane."
+            ),
+        ),
         DeclareLaunchArgument(
             "camera_z",
-            default_value="0.81",
+            default_value="0.82",
             description="Measured camera_link height above the OpenArmX world/body origin.",
         ),
-        DeclareLaunchArgument("camera_qx", default_value="0.0"),
-        DeclareLaunchArgument("camera_qy", default_value="0.0"),
-        DeclareLaunchArgument("camera_qz", default_value="0.0"),
-        DeclareLaunchArgument("camera_qw", default_value="1.0"),
+        DeclareLaunchArgument(
+            "camera_qx",
+            default_value="-0.018985075",
+            description="D435i gravity-calibrated camera roll component (-2.178 deg).",
+        ),
+        DeclareLaunchArgument(
+            "camera_qy",
+            default_value="0.046330975",
+            description="D435i gravity-calibrated camera pitch component (+5.312 deg).",
+        ),
+        DeclareLaunchArgument("camera_qz", default_value="0.000880702"),
+        DeclareLaunchArgument("camera_qw", default_value="0.998745329"),
         DeclareLaunchArgument(
             "run_rviz",
             default_value="true",
@@ -706,6 +981,11 @@ def generate_launch_description():
             "run_visual_cues",
             default_value="false",
             description="Show low-cost teleoperation target, tracking, and ESDF cues in RViz.",
+        ),
+        DeclareLaunchArgument(
+            "run_untangle_preview",
+            default_value="false",
+            description="Generate visualization-only branch untangling paths; never sends robot commands.",
         ),
         DeclareLaunchArgument("visual_cues_active_arm", default_value="right"),
         DeclareLaunchArgument(
@@ -732,7 +1012,7 @@ def generate_launch_description():
         DeclareLaunchArgument("visual_cues_safety_margin", default_value="0.04"),
         DeclareLaunchArgument("visual_cues_activation_margin", default_value="0.10"),
         DeclareLaunchArgument("visual_cues_ready_distance", default_value="0.01"),
-        DeclareLaunchArgument("visual_cues_assisted_grasp_enabled", default_value="true"),
+        DeclareLaunchArgument("visual_cues_assisted_grasp_enabled", default_value="false"),
         DeclareLaunchArgument("visual_cues_assist_activation_distance", default_value="0.08"),
         DeclareLaunchArgument("visual_cues_assist_min_alpha", default_value="0.0"),
         DeclareLaunchArgument("visual_cues_assist_max_alpha", default_value="1.00"),
@@ -740,6 +1020,47 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "visual_cues_pointcloud_topic",
             default_value="/foundation_stereo/points",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_target_selection_mode",
+            default_value="ray",
+        ),
+        DeclareLaunchArgument("visual_cues_nearest_target_radius", default_value="0.08"),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_min_distance",
+            default_value="0.008",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_forward_only",
+            default_value="true",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_min_forward_distance",
+            default_value="0.035",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_lateral_radius",
+            default_value="0.040",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_support_radius",
+            default_value="0.018",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_min_points",
+            default_value="3",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_lock_delay_s",
+            default_value="0.20",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_self_filter_hand_radius",
+            default_value="0.045",
+        ),
+        DeclareLaunchArgument(
+            "visual_cues_nearest_target_self_filter_padding",
+            default_value="0.010",
         ),
         DeclareLaunchArgument(
             "visual_cues_left_gripper_topic",
@@ -828,6 +1149,64 @@ def generate_launch_description():
             description="Publish RViz MarkerArray capsules fitted to the depth_topic cable points.",
         ),
         DeclareLaunchArgument(
+            "run_rolling_object_voxels",
+            default_value="true",
+            description=(
+                "Show currently observed non-cable objects as short-lived voxels. "
+                "This is a visualization/target layer, not the avoidance source."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "rolling_object_pointcloud_topic",
+            default_value="/foundation_stereo/points",
+        ),
+        DeclareLaunchArgument(
+            "rolling_object_voxel_topic",
+            default_value="/perception/rolling_object_voxels",
+        ),
+        DeclareLaunchArgument("rolling_object_voxel_size_m", default_value="0.015"),
+        DeclareLaunchArgument("rolling_object_voxel_ttl_s", default_value="1.2"),
+        DeclareLaunchArgument("rolling_object_max_depth_m", default_value="1.4"),
+        DeclareLaunchArgument(
+            "rolling_object_cable_exclusion_padding_m",
+            default_value="0.025",
+        ),
+        DeclareLaunchArgument("run_protected_cable_interface", default_value="true"),
+        DeclareLaunchArgument(
+            "protected_cable_ground_truth_pose_array_topic",
+            default_value="/simulation/cable_centerlines_ground_truth",
+            description="Exact PhysX cable geometry used only for evaluation.",
+        ),
+        DeclareLaunchArgument(
+            "protected_cable_use_ground_truth_as_estimate",
+            default_value="false",
+            description="Use simulated cable truth as the CBF estimate in simulation-only tests.",
+        ),
+        DeclareLaunchArgument(
+            "protected_cable_ground_truth_topic",
+            default_value="/protected_cables/ground_truth",
+        ),
+        DeclareLaunchArgument(
+            "protected_cable_estimate_topic",
+            default_value="/protected_cables/estimate",
+        ),
+        DeclareLaunchArgument(
+            "protected_cable_estimate_source",
+            default_value="2",
+            description="ProtectedCable source enum; 2 denotes perception.",
+        ),
+        DeclareLaunchArgument(
+            "protected_cable_translation_bias_m",
+            default_value="[0.0, 0.0, 0.0]",
+        ),
+        DeclareLaunchArgument(
+            "protected_cable_rotation_bias_deg",
+            default_value="[0.0, 0.0, 0.0]",
+        ),
+        DeclareLaunchArgument("protected_cable_position_noise_std_m", default_value="0.0"),
+        DeclareLaunchArgument("protected_cable_latency_ms", default_value="0.0"),
+        DeclareLaunchArgument("protected_cable_dropout_probability", default_value="0.0"),
+        DeclareLaunchArgument(
             "run_robot_esdf_clearer",
             default_value="false",
             description="Clear OpenArmX body spheres from nvblox through the ESDF service. Disabled by default because it can erase thin cable maps.",
@@ -847,8 +1226,17 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "cable_capsule_source_mode",
-            default_value="voxel_layer",
-            description="Capsule fitting source: voxel_layer, mesh, pointcloud, or depth.",
+            default_value="fixed",
+            description="Capsule source: fixed, voxel_layer, mesh, pointcloud, or depth.",
+        ),
+        DeclareLaunchArgument(
+            "cable_capsule_fixed_file",
+            default_value=os.path.join(
+                get_package_share_directory("openarmx_nvblox_bringup"),
+                "config",
+                "fixed_cable_capsules.yaml",
+            ),
+            description="Persistent fixed cable capsule definition used by source_mode=fixed.",
         ),
         DeclareLaunchArgument("cable_capsule_pointcloud_topic", default_value="/nvblox_node/static_esdf_pointcloud"),
         DeclareLaunchArgument("cable_capsule_mesh_topic", default_value="/nvblox_node/mesh"),
@@ -928,12 +1316,37 @@ def generate_launch_description():
         DeclareLaunchArgument("cable_capsule_ema_alpha", default_value="0.18"),
         DeclareLaunchArgument("cable_capsule_hold_cycles", default_value="8"),
         DeclareLaunchArgument(
+            "cable_capsule_freeze",
+            default_value="true",
+            description="Lock the first stable pair of cable capsules and ignore later map changes.",
+        ),
+        DeclareLaunchArgument("cable_capsule_freeze_stable_cycles", default_value="15"),
+        DeclareLaunchArgument("cable_capsule_freeze_delay_s", default_value="5.0"),
+        DeclareLaunchArgument(
+            "cable_capsule_freeze_stability_tolerance_m",
+            default_value="0.01",
+        ),
+        DeclareLaunchArgument("cable_capsule_left_z_offset", default_value="0.0"),
+        DeclareLaunchArgument("cable_capsule_right_z_offset", default_value="0.0"),
+        DeclareLaunchArgument(
+            "run_fixed_cable_voxel_clearer",
+            default_value="false",
+            description=(
+                "Legacy one-shot voxel clearing. Keep false when the continuous fixed cable "
+                "depth mask is enabled."
+            ),
+        ),
+        DeclareLaunchArgument("cable_voxel_clear_delay_s", default_value="10.0"),
+        DeclareLaunchArgument("cable_voxel_clear_radius_m", default_value="0.035"),
+        DeclareLaunchArgument("cable_voxel_clear_sample_spacing_m", default_value="0.03"),
+        DeclareLaunchArgument(
             "cable_capsule_ransac_fallback_enabled",
             default_value="false",
             description="Enable global RANSAC fitting after connected components. False avoids bridging separated cable segments.",
         ),
         camera_tf,
         square_test_tf,
+        fixed_cable_depth_mask_node,
         semantic_obstacle_filter_node,
         depth_freeze_gate_node_raw,
         depth_freeze_gate_node_semantic,
@@ -942,7 +1355,11 @@ def generate_launch_description():
         nvblox_node_semantic,
         nvblox_node_semantic_frozen,
         cable_capsule_marker_node,
+        rolling_object_voxel_node,
+        fixed_cable_voxel_clearer_node,
+        protected_cable_interface_node,
         robot_esdf_clearer_node,
         visual_cues_node,
+        untangle_preview_node,
         rviz_node,
     ])

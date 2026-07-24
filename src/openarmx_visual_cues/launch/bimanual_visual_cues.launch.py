@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -46,7 +47,7 @@ def generate_launch_description():
         DeclareLaunchArgument("safety_margin", default_value="0.04"),
         DeclareLaunchArgument("activation_margin", default_value="0.10"),
         DeclareLaunchArgument("ready_distance", default_value="0.01"),
-        DeclareLaunchArgument("assisted_grasp_enabled", default_value="true"),
+        DeclareLaunchArgument("assisted_grasp_enabled", default_value="false"),
         DeclareLaunchArgument("assist_activation_distance", default_value="0.08"),
         DeclareLaunchArgument("assist_min_alpha", default_value="0.0"),
         DeclareLaunchArgument("assist_max_alpha", default_value="1.00"),
@@ -59,6 +60,8 @@ def generate_launch_description():
         DeclareLaunchArgument("show_target_text", default_value="true"),
         DeclareLaunchArgument("tracking_line_min_error", default_value="0.015"),
         DeclareLaunchArgument("ray_selection_enabled", default_value="true"),
+        DeclareLaunchArgument("target_selection_mode", default_value="ray"),
+        DeclareLaunchArgument("bimanual_target_selection", default_value="true"),
         DeclareLaunchArgument("show_rviz_selection_ray", default_value="false"),
         DeclareLaunchArgument("pointcloud_topic", default_value="/foundation_stereo/points"),
         DeclareLaunchArgument("color_image_topic", default_value="/camera/color/image_raw"),
@@ -84,6 +87,26 @@ def generate_launch_description():
         DeclareLaunchArgument("ray_hit_radius", default_value="0.045"),
         DeclareLaunchArgument("pointcloud_timeout_s", default_value="1.0"),
         DeclareLaunchArgument("candidate_hold_s", default_value="0.75"),
+        DeclareLaunchArgument("nearest_target_radius", default_value="0.08"),
+        DeclareLaunchArgument("nearest_target_min_distance", default_value="0.008"),
+        DeclareLaunchArgument("nearest_target_forward_only", default_value="true"),
+        DeclareLaunchArgument(
+            "nearest_target_min_forward_distance",
+            default_value="0.035",
+        ),
+        DeclareLaunchArgument("nearest_target_lateral_radius", default_value="0.040"),
+        DeclareLaunchArgument("nearest_target_support_radius", default_value="0.018"),
+        DeclareLaunchArgument("nearest_target_min_points", default_value="3"),
+        DeclareLaunchArgument("nearest_target_lock_delay_s", default_value="0.20"),
+        DeclareLaunchArgument("nearest_target_max_jitter", default_value="0.015"),
+        DeclareLaunchArgument(
+            "nearest_target_self_filter_hand_radius",
+            default_value="0.045",
+        ),
+        DeclareLaunchArgument(
+            "nearest_target_self_filter_padding",
+            default_value="0.010",
+        ),
         DeclareLaunchArgument("show_aim_reticle", default_value="true"),
         DeclareLaunchArgument("aim_reticle_distance", default_value="0.70"),
         DeclareLaunchArgument("use_aim_reticle_as_fallback_target", default_value="true"),
@@ -108,6 +131,7 @@ def generate_launch_description():
         DeclareLaunchArgument("target_lock_offset_y", default_value="0.0"),
         DeclareLaunchArgument("target_lock_offset_z", default_value="0.0"),
         DeclareLaunchArgument("show_target_roi", default_value="true"),
+        DeclareLaunchArgument("show_rviz_untangle_preview", default_value="false"),
         DeclareLaunchArgument("cable_capsules_topic", default_value="/perception/cable_capsules"),
         DeclareLaunchArgument("exclude_cable_capsule_points", default_value="true"),
         DeclareLaunchArgument("cable_capsule_exclusion_padding", default_value="0.025"),
@@ -117,6 +141,10 @@ def generate_launch_description():
         DeclareLaunchArgument("robot_self_filter_padding", default_value="0.010"),
         DeclareLaunchArgument("show_robot_self_filter", default_value="false"),
         DeclareLaunchArgument("untangle_mode_topic", default_value="/openarmx/untangle_mode"),
+        DeclareLaunchArgument("run_untangle_preview", default_value="true"),
+        DeclareLaunchArgument("left_untangle_path_topic", default_value="/untangle/left_ee_path"),
+        DeclareLaunchArgument("right_untangle_path_topic", default_value="/untangle/right_ee_path"),
+        DeclareLaunchArgument("untangle_preview_status_topic", default_value="/untangle/preview_status"),
     ]
 
     node = Node(
@@ -161,6 +189,10 @@ def generate_launch_description():
                 "show_target_text": LaunchConfiguration("show_target_text"),
                 "tracking_line_min_error": LaunchConfiguration("tracking_line_min_error"),
                 "ray_selection_enabled": LaunchConfiguration("ray_selection_enabled"),
+                "target_selection_mode": LaunchConfiguration("target_selection_mode"),
+                "bimanual_target_selection": LaunchConfiguration(
+                    "bimanual_target_selection"
+                ),
                 "show_rviz_selection_ray": LaunchConfiguration(
                     "show_rviz_selection_ray"
                 ),
@@ -180,6 +212,37 @@ def generate_launch_description():
                 "ray_hit_radius": LaunchConfiguration("ray_hit_radius"),
                 "pointcloud_timeout_s": LaunchConfiguration("pointcloud_timeout_s"),
                 "candidate_hold_s": LaunchConfiguration("candidate_hold_s"),
+                "nearest_target_radius": LaunchConfiguration("nearest_target_radius"),
+                "nearest_target_min_distance": LaunchConfiguration(
+                    "nearest_target_min_distance"
+                ),
+                "nearest_target_forward_only": LaunchConfiguration(
+                    "nearest_target_forward_only"
+                ),
+                "nearest_target_min_forward_distance": LaunchConfiguration(
+                    "nearest_target_min_forward_distance"
+                ),
+                "nearest_target_lateral_radius": LaunchConfiguration(
+                    "nearest_target_lateral_radius"
+                ),
+                "nearest_target_support_radius": LaunchConfiguration(
+                    "nearest_target_support_radius"
+                ),
+                "nearest_target_min_points": LaunchConfiguration(
+                    "nearest_target_min_points"
+                ),
+                "nearest_target_lock_delay_s": LaunchConfiguration(
+                    "nearest_target_lock_delay_s"
+                ),
+                "nearest_target_max_jitter": LaunchConfiguration(
+                    "nearest_target_max_jitter"
+                ),
+                "nearest_target_self_filter_hand_radius": LaunchConfiguration(
+                    "nearest_target_self_filter_hand_radius"
+                ),
+                "nearest_target_self_filter_padding": LaunchConfiguration(
+                    "nearest_target_self_filter_padding"
+                ),
                 "show_aim_reticle": LaunchConfiguration("show_aim_reticle"),
                 "aim_reticle_distance": LaunchConfiguration("aim_reticle_distance"),
                 "use_aim_reticle_as_fallback_target": LaunchConfiguration(
@@ -210,6 +273,9 @@ def generate_launch_description():
                 "target_lock_offset_y": LaunchConfiguration("target_lock_offset_y"),
                 "target_lock_offset_z": LaunchConfiguration("target_lock_offset_z"),
                 "show_target_roi": LaunchConfiguration("show_target_roi"),
+                "show_rviz_untangle_preview": LaunchConfiguration(
+                    "show_rviz_untangle_preview"
+                ),
                 "cable_capsules_topic": LaunchConfiguration("cable_capsules_topic"),
                 "exclude_cable_capsule_points": LaunchConfiguration(
                     "exclude_cable_capsule_points"
@@ -231,8 +297,37 @@ def generate_launch_description():
                     "show_robot_self_filter"
                 ),
                 "untangle_mode_topic": LaunchConfiguration("untangle_mode_topic"),
+                "left_untangle_path_topic": LaunchConfiguration("left_untangle_path_topic"),
+                "right_untangle_path_topic": LaunchConfiguration("right_untangle_path_topic"),
+                "untangle_preview_status_topic": LaunchConfiguration(
+                    "untangle_preview_status_topic"
+                ),
             }
         ],
     )
 
-    return LaunchDescription(arguments + [node])
+    preview_node = Node(
+        package="openarmx_visual_cues",
+        executable="branch_untangle_preview",
+        name="branch_untangle_preview",
+        output="screen",
+        respawn=True,
+        respawn_delay=1.0,
+        additional_env={"PYTHONNOUSERSITE": "1"},
+        parameters=[
+            {
+                "global_frame": LaunchConfiguration("global_frame"),
+                "active_arm": LaunchConfiguration("active_arm"),
+                "active_arm_topic": LaunchConfiguration("active_arm_topic"),
+                "left_start_pose_topic": LaunchConfiguration("left_desired_pose_topic"),
+                "right_start_pose_topic": LaunchConfiguration("right_desired_pose_topic"),
+                "cable_capsules_topic": LaunchConfiguration("cable_capsules_topic"),
+                "left_path_topic": LaunchConfiguration("left_untangle_path_topic"),
+                "right_path_topic": LaunchConfiguration("right_untangle_path_topic"),
+                "status_topic": LaunchConfiguration("untangle_preview_status_topic"),
+            }
+        ],
+        condition=IfCondition(LaunchConfiguration("run_untangle_preview")),
+    )
+
+    return LaunchDescription(arguments + [node, preview_node])

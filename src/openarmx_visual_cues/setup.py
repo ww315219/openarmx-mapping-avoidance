@@ -25,6 +25,7 @@ setup(
     entry_points={
         "console_scripts": [
             "bimanual_visual_cues = openarmx_visual_cues.bimanual_visual_cues:main",
+            "branch_untangle_preview = openarmx_visual_cues.branch_untangle_preview:main",
         ],
     },
 )

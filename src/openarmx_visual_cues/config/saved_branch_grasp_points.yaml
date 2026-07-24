@@ -1,0 +1,18 @@
+# Captured from the visual-cue locked targets on 2026-07-17.
+frame_id: world
+left:
+  position: [0.9264702367782593, 0.022677296772599408, 1.022392181158066]
+  orientation: [0.0, 0.0, 0.0, 1.0]
+right:
+  position: [0.8770142364501954, -0.15242581069469435, 1.0181607133150103]
+  orientation: [0.0, 0.0, 0.0, 1.0]
+
+# Offline cable frame used when the mapping/capsule pipeline is not running.
+# The pair is centered around the recorded targets, has the measured 0.44 m
+# separation, and points along world +X. It exists only to reproduce this
+# saved Isaac test; live mapping should use --targets-only instead.
+cable_pair:
+  - position: [0.9017422366142273, -0.28487425696104747, 1.020276447236538]
+    orientation: [0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
+  - position: [0.9017422366142273, 0.15512574303895254, 1.020276447236538]
+    orientation: [0.0, 0.7071067811865476, 0.0, 0.7071067811865476]

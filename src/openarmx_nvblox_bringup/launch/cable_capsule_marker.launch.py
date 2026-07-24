@@ -1,13 +1,24 @@
+import os
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
     return LaunchDescription(
         [
-            DeclareLaunchArgument("source_mode", default_value="voxel_layer"),
+            DeclareLaunchArgument("source_mode", default_value="fixed"),
+            DeclareLaunchArgument(
+                "fixed_capsule_file",
+                default_value=os.path.join(
+                    get_package_share_directory("openarmx_nvblox_bringup"),
+                    "config",
+                    "fixed_cable_capsules.yaml",
+                ),
+            ),
             DeclareLaunchArgument("depth_topic", default_value="/perception/cable_depth"),
             DeclareLaunchArgument("camera_info_topic", default_value="/perception/cable_depth/camera_info"),
             DeclareLaunchArgument("pointcloud_topic", default_value="/nvblox_node/static_esdf_pointcloud"),
@@ -48,6 +59,13 @@ def generate_launch_description():
             DeclareLaunchArgument("component_merge_direction_dot", default_value="0.90"),
             DeclareLaunchArgument("capsule_ema_alpha", default_value="0.18"),
             DeclareLaunchArgument("capsule_hold_cycles", default_value="8"),
+            DeclareLaunchArgument("freeze_capsules", default_value="true"),
+            DeclareLaunchArgument("freeze_min_capsules", default_value="2"),
+            DeclareLaunchArgument("freeze_delay_s", default_value="5.0"),
+            DeclareLaunchArgument("freeze_stable_cycles", default_value="15"),
+            DeclareLaunchArgument("freeze_stability_tolerance_m", default_value="0.01"),
+            DeclareLaunchArgument("left_capsule_z_offset", default_value="0.0"),
+            DeclareLaunchArgument("right_capsule_z_offset", default_value="0.0"),
             DeclareLaunchArgument("ransac_fallback_enabled", default_value="false"),
             DeclareLaunchArgument("ransac_iterations", default_value="180"),
             DeclareLaunchArgument("ransac_inlier_distance_m", default_value="0.035"),
@@ -61,6 +79,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         "source_mode": LaunchConfiguration("source_mode"),
+                        "fixed_capsule_file": LaunchConfiguration("fixed_capsule_file"),
                         "depth_topic": LaunchConfiguration("depth_topic"),
                         "camera_info_topic": LaunchConfiguration("camera_info_topic"),
                         "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
@@ -101,6 +120,13 @@ def generate_launch_description():
                         "component_merge_direction_dot": LaunchConfiguration("component_merge_direction_dot"),
                         "capsule_ema_alpha": LaunchConfiguration("capsule_ema_alpha"),
                         "capsule_hold_cycles": LaunchConfiguration("capsule_hold_cycles"),
+                        "freeze_capsules": LaunchConfiguration("freeze_capsules"),
+                        "freeze_min_capsules": LaunchConfiguration("freeze_min_capsules"),
+                        "freeze_delay_s": LaunchConfiguration("freeze_delay_s"),
+                        "freeze_stable_cycles": LaunchConfiguration("freeze_stable_cycles"),
+                        "freeze_stability_tolerance_m": LaunchConfiguration("freeze_stability_tolerance_m"),
+                        "left_capsule_z_offset": LaunchConfiguration("left_capsule_z_offset"),
+                        "right_capsule_z_offset": LaunchConfiguration("right_capsule_z_offset"),
                         "ransac_fallback_enabled": LaunchConfiguration("ransac_fallback_enabled"),
                         "ransac_iterations": LaunchConfiguration("ransac_iterations"),
                         "ransac_inlier_distance_m": LaunchConfiguration("ransac_inlier_distance_m"),

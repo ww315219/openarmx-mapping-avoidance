@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import math
+import copy
 from typing import Optional
 
 import cv2
 import numpy as np
 import rclpy
 import tf2_ros
+import yaml
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Point
 from nvblox_msgs.msg import Mesh, VoxelBlockLayer
@@ -17,6 +19,8 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from sensor_msgs_py import point_cloud2
+from std_msgs.msg import Header, String
+from std_srvs.srv import Trigger
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -70,6 +74,7 @@ class CableCapsuleMarkerNode(Node):
         super().__init__("cable_capsule_marker")
 
         self.declare_parameter("source_mode", "voxel_layer")
+        self.declare_parameter("fixed_capsule_file", "")
         self.declare_parameter("depth_topic", "/perception/cable_depth")
         self.declare_parameter("camera_info_topic", "/perception/cable_depth/camera_info")
         self.declare_parameter("pointcloud_topic", "/nvblox_node/static_esdf_pointcloud")
@@ -146,6 +151,17 @@ class CableCapsuleMarkerNode(Node):
         self.declare_parameter("seed_min_neighbor_voxels", 3)
         self.declare_parameter("seed_neighbor_radius_m", 0.08)
         self.declare_parameter("seed_search_max_candidates", 128)
+        self.declare_parameter("freeze_capsules", True)
+        self.declare_parameter("freeze_min_capsules", 2)
+        self.declare_parameter("freeze_delay_s", 5.0)
+        self.declare_parameter("freeze_stable_cycles", 15)
+        self.declare_parameter("freeze_stability_tolerance_m", 0.01)
+        self.declare_parameter("left_capsule_z_offset", 0.0)
+        self.declare_parameter("right_capsule_z_offset", 0.0)
+        self.declare_parameter("left_tcp_frame", "openarmx_left_hand_tcp")
+        self.declare_parameter("right_tcp_frame", "openarmx_right_hand_tcp")
+        self.declare_parameter("status_topic", "/perception/cable_capsule_status")
+        self.declare_parameter("status_log_period_s", 2.0)
 
         self.bridge = CvBridge()
         self.source_mode = str(self.get_parameter("source_mode").value).strip().lower()
@@ -159,6 +175,15 @@ class CableCapsuleMarkerNode(Node):
         self.voxel_header = None
         self.rng = np.random.default_rng(7)
         self.tracked_capsules: list[dict[str, object]] = []
+        self.locked_capsules: list[tuple[np.ndarray, np.ndarray]] = []
+        self.locked_header = None
+        self.freeze_stable_count = 0
+        self.previous_freeze_candidate: list[tuple[np.ndarray, np.ndarray]] = []
+        self.latest_candidate_capsules: list[tuple[np.ndarray, np.ndarray]] = []
+        self.latest_candidate_header = None
+        self.fixed_radius_m: Optional[float] = None
+        self.last_status_log_ns = 0
+        self.started_ns = self.get_clock().now().nanoseconds
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
@@ -167,7 +192,16 @@ class CableCapsuleMarkerNode(Node):
             str(self.get_parameter("marker_topic").value),
             _marker_qos(),
         )
-        if self.source_mode == "depth":
+        self.status_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("status_topic").value),
+            _marker_qos(),
+        )
+        self.create_service(Trigger, "~/freeze", self._freeze_service_cb)
+        self.create_service(Trigger, "~/reset", self._reset_service_cb)
+        if self.source_mode == "fixed":
+            self._load_fixed_capsules()
+        elif self.source_mode == "depth":
             self.create_subscription(
                 CameraInfo,
                 str(self.get_parameter("camera_info_topic").value),
@@ -202,7 +236,9 @@ class CableCapsuleMarkerNode(Node):
                 _sensor_qos(),
             )
         else:
-            raise ValueError("source_mode must be one of: depth, pointcloud, mesh, voxel_layer")
+            raise ValueError(
+                "source_mode must be one of: fixed, depth, pointcloud, mesh, voxel_layer"
+            )
 
         rate_hz = max(1.0, float(self.get_parameter("publish_rate_hz").value))
         self.timer = self.create_timer(1.0 / rate_hz, self._timer_cb)
@@ -213,6 +249,32 @@ class CableCapsuleMarkerNode(Node):
 
     def _camera_info_cb(self, msg: CameraInfo) -> None:
         self.camera_info = msg
+
+    def _load_fixed_capsules(self) -> None:
+        path = str(self.get_parameter("fixed_capsule_file").value).strip()
+        if not path:
+            raise ValueError("fixed_capsule_file is required when source_mode=fixed")
+        with open(path, "r", encoding="utf-8") as stream:
+            config = yaml.safe_load(stream) or {}
+        frame_id = str(config.get("frame_id", "world")).strip() or "world"
+        configured_radius = float(config.get("radius_m", self.get_parameter("radius_m").value))
+        self.fixed_radius_m = max(1e-4, configured_radius)
+        entries = config.get("capsules", [])
+        capsules: list[tuple[np.ndarray, np.ndarray]] = []
+        for entry in entries:
+            start = np.asarray(entry.get("start", []), dtype=np.float64)
+            end = np.asarray(entry.get("end", []), dtype=np.float64)
+            if start.shape != (3,) or end.shape != (3,) or not np.all(np.isfinite(start)) or not np.all(np.isfinite(end)):
+                raise ValueError(f"Invalid fixed cable capsule entry: {entry!r}")
+            capsules.append((start, end))
+        if not capsules:
+            raise ValueError(f"No cable capsules found in {path}")
+
+        header = Header()
+        header.frame_id = frame_id
+        header.stamp = self.get_clock().now().to_msg()
+        adjusted = self._apply_capsule_z_offsets(capsules, frame_id)
+        self._lock_capsules(adjusted, header, f"fixed file {path}")
 
     def _depth_cb(self, msg: Image) -> None:
         self.latest_depth_msg = msg
@@ -252,6 +314,13 @@ class CableCapsuleMarkerNode(Node):
         self.voxel_header = msg.header
 
     def _timer_cb(self) -> None:
+        if self.locked_capsules and self.locked_header is not None:
+            header = copy.deepcopy(self.locked_header)
+            header.stamp = self.get_clock().now().to_msg()
+            self.marker_pub.publish(self._markers_from_capsules(self.locked_capsules, header))
+            self._publish_height_status(self.locked_capsules, header, locked=True)
+            return
+
         if self.source_mode == "depth":
             if self.camera_info is None or self.latest_depth_msg is None:
                 return
@@ -264,7 +333,9 @@ class CableCapsuleMarkerNode(Node):
 
             depth_m = self._to_depth_meters(depth_raw, self.latest_depth_msg.encoding)
             capsules = self._fit_capsules(depth_m)
+            capsules = self._prepare_and_maybe_freeze(capsules, self.latest_depth_msg.header)
             self.marker_pub.publish(self._markers_from_capsules(capsules, self.latest_depth_msg.header))
+            self._publish_height_status(capsules, self.latest_depth_msg.header, locked=bool(self.locked_capsules))
             return
 
         points_and_header = self._points_from_map_source()
@@ -273,7 +344,206 @@ class CableCapsuleMarkerNode(Node):
         points, header = points_and_header
         capsules = self._fit_capsules_from_points(points, str(header.frame_id))
         capsules = self._smooth_capsules(capsules)
+        capsules = self._prepare_and_maybe_freeze(capsules, header)
         self.marker_pub.publish(self._markers_from_capsules(capsules, header))
+        self._publish_height_status(capsules, header, locked=bool(self.locked_capsules))
+
+    def _prepare_and_maybe_freeze(
+        self,
+        capsules: list[tuple[np.ndarray, np.ndarray]],
+        header,
+    ) -> list[tuple[np.ndarray, np.ndarray]]:
+        adjusted = self._apply_capsule_z_offsets(capsules, str(header.frame_id))
+        self.latest_candidate_capsules = self._copy_capsules(adjusted)
+        self.latest_candidate_header = copy.deepcopy(header)
+        if not bool(self.get_parameter("freeze_capsules").value):
+            return adjusted
+
+        freeze_delay_ns = int(max(0.0, float(self.get_parameter("freeze_delay_s").value)) * 1e9)
+        if self.get_clock().now().nanoseconds - self.started_ns < freeze_delay_ns:
+            return adjusted
+
+        min_capsules = max(1, int(self.get_parameter("freeze_min_capsules").value))
+        if len(adjusted) < min_capsules:
+            self.freeze_stable_count = 0
+            self.previous_freeze_candidate = []
+            return adjusted
+
+        tolerance = max(
+            1e-4,
+            float(self.get_parameter("freeze_stability_tolerance_m").value),
+        )
+        if self._capsule_sets_close(adjusted, self.previous_freeze_candidate, tolerance):
+            self.freeze_stable_count += 1
+        else:
+            self.freeze_stable_count = 1
+        self.previous_freeze_candidate = self._copy_capsules(adjusted)
+
+        stable_cycles = max(1, int(self.get_parameter("freeze_stable_cycles").value))
+        if self.freeze_stable_count >= stable_cycles:
+            self._lock_capsules(adjusted, header, "stable detections")
+            return self.locked_capsules
+        return adjusted
+
+    @staticmethod
+    def _copy_capsules(
+        capsules: list[tuple[np.ndarray, np.ndarray]],
+    ) -> list[tuple[np.ndarray, np.ndarray]]:
+        return [(start.copy(), end.copy()) for start, end in capsules]
+
+    @staticmethod
+    def _capsule_sets_close(
+        current: list[tuple[np.ndarray, np.ndarray]],
+        previous: list[tuple[np.ndarray, np.ndarray]],
+        tolerance: float,
+    ) -> bool:
+        if len(current) != len(previous) or not current:
+            return False
+        unused = set(range(len(previous)))
+        for start, end in current:
+            best_index = -1
+            best_error = float("inf")
+            for index in unused:
+                old_start, old_end = previous[index]
+                direct = max(
+                    float(np.linalg.norm(start - old_start)),
+                    float(np.linalg.norm(end - old_end)),
+                )
+                reversed_error = max(
+                    float(np.linalg.norm(start - old_end)),
+                    float(np.linalg.norm(end - old_start)),
+                )
+                error = min(direct, reversed_error)
+                if error < best_error:
+                    best_error = error
+                    best_index = index
+            if best_index < 0 or best_error > tolerance:
+                return False
+            unused.remove(best_index)
+        return True
+
+    def _lock_capsules(self, capsules, header, reason: str) -> None:
+        self.locked_capsules = self._copy_capsules(capsules)
+        self.locked_header = copy.deepcopy(header)
+        self.get_logger().info(
+            f"Locked {len(self.locked_capsules)} cable capsules from {reason}; "
+            "new map/voxel updates will not move them."
+        )
+
+    def _freeze_service_cb(self, _request, response):
+        capsules = self.latest_candidate_capsules
+        header = self.latest_candidate_header
+        if not capsules or header is None:
+            response.success = False
+            response.message = "No fitted capsules are available to freeze."
+            return response
+        self._lock_capsules(capsules, header, "freeze service")
+        response.success = True
+        response.message = f"Frozen {len(self.locked_capsules)} cable capsules."
+        return response
+
+    def _reset_service_cb(self, _request, response):
+        if self.source_mode == "fixed":
+            response.success = False
+            response.message = "Fixed capsule mode cannot refit; edit the YAML file or restart in voxel_layer mode."
+            return response
+        self.locked_capsules = []
+        self.locked_header = None
+        self.freeze_stable_count = 0
+        self.previous_freeze_candidate = []
+        self.latest_candidate_capsules = []
+        self.latest_candidate_header = None
+        self.tracked_capsules = []
+        response.success = True
+        response.message = "Cable capsule lock cleared; fitting resumed."
+        self.get_logger().info(response.message)
+        return response
+
+    def _apply_capsule_z_offsets(
+        self,
+        capsules: list[tuple[np.ndarray, np.ndarray]],
+        frame_id: str,
+    ) -> list[tuple[np.ndarray, np.ndarray]]:
+        adjusted = self._copy_capsules(capsules)
+        assignments = self._assign_capsules_to_sides(adjusted, frame_id)
+        for side, index in assignments.items():
+            offset = float(self.get_parameter(f"{side}_capsule_z_offset").value)
+            adjusted[index][0][2] += offset
+            adjusted[index][1][2] += offset
+        return adjusted
+
+    def _assign_capsules_to_sides(
+        self,
+        capsules: list[tuple[np.ndarray, np.ndarray]],
+        frame_id: str,
+    ) -> dict[str, int]:
+        if not capsules:
+            return {}
+        references = self._seed_reference_points(frame_id)
+        assignments: dict[str, int] = {}
+        unused = set(range(len(capsules)))
+        for side, reference in zip(("left", "right"), references):
+            if not unused:
+                break
+            index = min(
+                unused,
+                key=lambda item: self._point_segment_distance(reference, *capsules[item]),
+            )
+            assignments[side] = index
+            unused.remove(index)
+        return assignments
+
+    @staticmethod
+    def _point_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
+        segment = end - start
+        length_squared = float(segment @ segment)
+        if length_squared < 1e-12:
+            return float(np.linalg.norm(point - start))
+        ratio = float(np.clip(((point - start) @ segment) / length_squared, 0.0, 1.0))
+        return float(np.linalg.norm(point - (start + ratio * segment)))
+
+    def _publish_height_status(self, capsules, header, locked: bool) -> None:
+        frame_id = str(header.frame_id)
+        assignments = self._assign_capsules_to_sides(capsules, frame_id)
+        fields = [f"locked={str(locked).lower()}", f"frame={frame_id}", f"count={len(capsules)}"]
+        for side in ("left", "right"):
+            index = assignments.get(side)
+            if index is None:
+                fields.append(f"{side}=no_capsule")
+                continue
+            tcp = self._lookup_frame_position(frame_id, str(self.get_parameter(f"{side}_tcp_frame").value))
+            if tcp is None:
+                fields.append(f"{side}=no_tcp_tf")
+                continue
+            start, end = capsules[index]
+            axis_z = 0.5 * float(start[2] + end[2])
+            delta = float(tcp[2] - axis_z)
+            fields.append(
+                f"{side}_axis_z={axis_z:.4f} {side}_tcp_z={tcp[2]:.4f} "
+                f"{side}_tcp_minus_axis_z={delta:.4f}m"
+            )
+        text = " ".join(fields)
+        self.status_pub.publish(String(data=text))
+        now_ns = self.get_clock().now().nanoseconds
+        period_ns = int(max(0.1, float(self.get_parameter("status_log_period_s").value)) * 1e9)
+        if now_ns - self.last_status_log_ns >= period_ns:
+            self.get_logger().info(text)
+            self.last_status_log_ns = now_ns
+
+    def _lookup_frame_position(self, target_frame: str, source_frame: str) -> Optional[np.ndarray]:
+        if not target_frame or not source_frame:
+            return None
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                target_frame,
+                source_frame,
+                Time(),
+                timeout=Duration(seconds=0.02),
+            )
+        except Exception:
+            return None
+        translation = transform.transform.translation
+        return np.array([translation.x, translation.y, translation.z], dtype=np.float64)
 
     def _points_from_map_source(self) -> Optional[tuple[np.ndarray, object]]:
         if self.source_mode == "pointcloud":
@@ -1072,7 +1342,11 @@ class CableCapsuleMarkerNode(Node):
         delete.action = Marker.DELETEALL
         marker_array.markers.append(delete)
 
-        radius = float(self.get_parameter("radius_m").value)
+        radius = (
+            self.fixed_radius_m
+            if self.fixed_radius_m is not None
+            else float(self.get_parameter("radius_m").value)
+        )
         rgba = (
             float(self.get_parameter("color_r").value),
             float(self.get_parameter("color_g").value),

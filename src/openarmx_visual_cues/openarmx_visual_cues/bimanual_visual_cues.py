@@ -14,6 +14,7 @@ import rclpy
 from builtin_interfaces.msg import Duration
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Point, PointStamped, PoseStamped
+from nav_msgs.msg import Path
 from rcl_interfaces.srv import GetParameters
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.duration import Duration as RclpyDuration
@@ -154,7 +155,7 @@ class BimanualVisualCues(Node):
         self.declare_parameter("safety_margin", 0.04)
         self.declare_parameter("activation_margin", 0.10)
         self.declare_parameter("ready_distance", 0.01)
-        self.declare_parameter("assisted_grasp_enabled", True)
+        self.declare_parameter("assisted_grasp_enabled", False)
         self.declare_parameter("assist_activation_distance", 0.08)
         self.declare_parameter("assist_min_alpha", 0.0)
         self.declare_parameter("assist_max_alpha", 1.00)
@@ -169,6 +170,8 @@ class BimanualVisualCues(Node):
         self.declare_parameter("show_target_text", True)
         self.declare_parameter("tracking_line_min_error", 0.015)
         self.declare_parameter("ray_selection_enabled", True)
+        self.declare_parameter("target_selection_mode", "ray")
+        self.declare_parameter("bimanual_target_selection", True)
         self.declare_parameter("show_rviz_selection_ray", False)
         self.declare_parameter("pointcloud_topic", "/foundation_stereo/points")
         self.declare_parameter("ray_axis", [0.0, 0.0, 1.0])
@@ -182,6 +185,17 @@ class BimanualVisualCues(Node):
         self.declare_parameter("pointcloud_timeout_s", 1.00)
         self.declare_parameter("candidate_hold_s", 0.75)
         self.declare_parameter("candidate_ema_alpha", 0.35)
+        self.declare_parameter("nearest_target_radius", 0.08)
+        self.declare_parameter("nearest_target_min_distance", 0.008)
+        self.declare_parameter("nearest_target_forward_only", True)
+        self.declare_parameter("nearest_target_min_forward_distance", 0.035)
+        self.declare_parameter("nearest_target_lateral_radius", 0.040)
+        self.declare_parameter("nearest_target_support_radius", 0.018)
+        self.declare_parameter("nearest_target_min_points", 3)
+        self.declare_parameter("nearest_target_lock_delay_s", 0.20)
+        self.declare_parameter("nearest_target_max_jitter", 0.015)
+        self.declare_parameter("nearest_target_self_filter_hand_radius", 0.045)
+        self.declare_parameter("nearest_target_self_filter_padding", 0.010)
         self.declare_parameter("show_aim_reticle", True)
         self.declare_parameter("aim_reticle_distance", 0.70)
         self.declare_parameter("use_aim_reticle_as_fallback_target", True)
@@ -233,6 +247,12 @@ class BimanualVisualCues(Node):
         self.declare_parameter("target_locked_topic", "/visual_cues/target_locked")
         self.declare_parameter("target_distance_topic", "/visual_cues/target_distance")
         self.declare_parameter("grasp_ready_topic", "/visual_cues/grasp_ready")
+        self.declare_parameter("show_untangle_preview", True)
+        self.declare_parameter("show_rviz_untangle_preview", False)
+        self.declare_parameter("left_untangle_path_topic", "/untangle/left_ee_path")
+        self.declare_parameter("right_untangle_path_topic", "/untangle/right_ee_path")
+        self.declare_parameter("untangle_preview_status_topic", "/untangle/preview_status")
+        self.declare_parameter("untangle_preview_path_width", 0.012)
 
         self.global_frame = str(self.get_parameter("global_frame").value)
         self.robot_description_node = str(self.get_parameter("robot_description_node").value)
@@ -282,6 +302,16 @@ class BimanualVisualCues(Node):
             float(self.get_parameter("tracking_line_min_error").value),
         )
         self.ray_selection_enabled = bool(self.get_parameter("ray_selection_enabled").value)
+        self.target_selection_mode = str(
+            self.get_parameter("target_selection_mode").value
+        ).strip().lower()
+        if self.target_selection_mode not in ("nearest_tcp", "ray"):
+            raise RuntimeError(
+                "target_selection_mode must be either 'nearest_tcp' or 'ray'"
+            )
+        self.bimanual_target_selection = bool(
+            self.get_parameter("bimanual_target_selection").value
+        )
         self.show_rviz_selection_ray = bool(
             self.get_parameter("show_rviz_selection_ray").value
         )
@@ -320,6 +350,67 @@ class BimanualVisualCues(Node):
         )
         self.candidate_ema_alpha = float(
             np.clip(float(self.get_parameter("candidate_ema_alpha").value), 0.0, 1.0)
+        )
+        self.nearest_target_radius = max(
+            0.01,
+            float(self.get_parameter("nearest_target_radius").value),
+        )
+        self.nearest_target_min_distance = float(
+            np.clip(
+                float(self.get_parameter("nearest_target_min_distance").value),
+                0.0,
+                self.nearest_target_radius - 1e-3,
+            )
+        )
+        self.nearest_target_forward_only = bool(
+            self.get_parameter("nearest_target_forward_only").value
+        )
+        self.nearest_target_min_forward_distance = float(
+            np.clip(
+                float(
+                    self.get_parameter(
+                        "nearest_target_min_forward_distance"
+                    ).value
+                ),
+                0.0,
+                self.nearest_target_radius,
+            )
+        )
+        self.nearest_target_lateral_radius = max(
+            0.005,
+            float(self.get_parameter("nearest_target_lateral_radius").value),
+        )
+        self.nearest_target_support_radius = max(
+            0.003,
+            float(self.get_parameter("nearest_target_support_radius").value),
+        )
+        self.nearest_target_min_points = max(
+            1,
+            int(self.get_parameter("nearest_target_min_points").value),
+        )
+        self.nearest_target_lock_delay_s = max(
+            0.0,
+            float(self.get_parameter("nearest_target_lock_delay_s").value),
+        )
+        self.nearest_target_max_jitter = max(
+            0.001,
+            float(self.get_parameter("nearest_target_max_jitter").value),
+        )
+        self.nearest_target_self_filter_hand_radius = max(
+            0.005,
+            float(
+                self.get_parameter(
+                    "nearest_target_self_filter_hand_radius"
+                ).value
+            ),
+        )
+        self.nearest_target_self_filter_padding = max(
+            0.0,
+            float(
+                self.get_parameter(
+                    "nearest_target_self_filter_padding"
+                ).value
+            ),
         )
         self.show_aim_reticle = bool(self.get_parameter("show_aim_reticle").value)
         self.aim_reticle_distance = max(
@@ -409,6 +500,16 @@ class BimanualVisualCues(Node):
         self.show_robot_self_filter = bool(
             self.get_parameter("show_robot_self_filter").value
         )
+        self.show_untangle_preview = bool(
+            self.get_parameter("show_untangle_preview").value
+        )
+        self.show_rviz_untangle_preview = bool(
+            self.get_parameter("show_rviz_untangle_preview").value
+        )
+        self.untangle_preview_path_width = max(
+            0.002,
+            float(self.get_parameter("untangle_preview_path_width").value),
+        )
         self.active_arm = self._validated_arm(str(self.get_parameter("active_arm").value))
         self.bridge = CvBridge()
 
@@ -453,9 +554,15 @@ class BimanualVisualCues(Node):
         self.assist_start_times = {"left": None, "right": None}
         self.target_drift_start_times = {"left": None, "right": None}
         self.last_candidate_times = {"left": None, "right": None}
+        self.auto_candidate_start_times = {"left": None, "right": None}
         self.latest_pointcloud: PointCloud2 | None = None
         self.latest_pointcloud_time = None
         self.cable_capsules: list[CableCapsule] = []
+        self.untangle_preview_paths: dict[str, list[np.ndarray]] = {
+            "left": [],
+            "right": [],
+        }
+        self.untangle_preview_status = ""
         self.color_camera_info: CameraInfo | None = None
         self.last_ray_update_time = None
         self.untangle_mode = False
@@ -525,6 +632,30 @@ class BimanualVisualCues(Node):
             str(self.get_parameter("cable_capsules_topic").value),
             self._cable_capsules_cb,
             10,
+        )
+        preview_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.create_subscription(
+            Path,
+            str(self.get_parameter("left_untangle_path_topic").value),
+            lambda msg: self._untangle_preview_path_cb("left", msg),
+            preview_qos,
+        )
+        self.create_subscription(
+            Path,
+            str(self.get_parameter("right_untangle_path_topic").value),
+            lambda msg: self._untangle_preview_path_cb("right", msg),
+            preview_qos,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("untangle_preview_status_topic").value),
+            self._untangle_preview_status_cb,
+            preview_qos,
         )
         self.create_subscription(
             CameraInfo,
@@ -658,9 +789,17 @@ class BimanualVisualCues(Node):
         self.get_logger().info(
             "Bimanual visual cues: "
             f"frame={self.global_frame}, active_arm={self.active_arm}, "
+            f"selection={self.target_selection_mode}, "
+            f"simultaneous_selection={self.bimanual_target_selection}, "
             f"marker={self.get_parameter('marker_topic').value}, "
-            f"ray_cloud={self.get_parameter('pointcloud_topic').value}. "
-            f"Aim with TCP +Z and close the Mini gripper {self.lock_close_count} times to lock."
+            f"pointcloud={self.get_parameter('pointcloud_topic').value}. "
+            + (
+                f"Open gripper to auto-lock the nearest supported 3D point within "
+                f"{self.nearest_target_radius * 100.0:.1f} cm."
+                if self.target_selection_mode == "nearest_tcp"
+                else f"Aim with TCP +Z and close the Mini gripper "
+                f"{self.lock_close_count} times to lock."
+            )
         )
 
     def _write_robot_description_to_temp_urdf(self) -> str:
@@ -772,6 +911,32 @@ class BimanualVisualCues(Node):
             capsules.append(CableCapsule(center, axis, half_length, radius))
         self.cable_capsules = capsules
 
+    def _untangle_preview_path_cb(self, arm: str, msg: Path) -> None:
+        if not msg.poses:
+            self.untangle_preview_paths[arm] = []
+            return
+        source_frame = msg.header.frame_id.strip() or self.global_frame
+        transform = None
+        if source_frame != self.global_frame:
+            transform = self._lookup_transform(source_frame)
+            if transform is None:
+                return
+        points: list[np.ndarray] = []
+        for pose in msg.poses:
+            point = np.array(
+                [pose.pose.position.x, pose.pose.position.y, pose.pose.position.z],
+                dtype=float,
+            )
+            if transform is not None:
+                translation, rotation = transform
+                point = rotation @ point + translation
+            if np.all(np.isfinite(point)):
+                points.append(point)
+        self.untangle_preview_paths[arm] = points
+
+    def _untangle_preview_status_cb(self, msg: String) -> None:
+        self.untangle_preview_status = msg.data
+
     def _color_camera_info_cb(self, msg: CameraInfo) -> None:
         self.color_camera_info = msg
 
@@ -841,29 +1006,72 @@ class BimanualVisualCues(Node):
                 annotated.shape[1],
                 annotated.shape[0],
             )
-            if self.show_aim_reticle and not locked:
-                if reticle_point is not None:
-                    aim_pixel = self._global_point_to_pixel(
-                        reticle_point,
+
+        if self.show_aim_reticle and self.target_selection_mode == "ray":
+            reticle_arms = (
+                ("left", "right")
+                if self.bimanual_target_selection
+                else (arm,)
+            )
+            for reticle_arm in reticle_arms:
+                if self.targets[reticle_arm] is not None:
+                    continue
+                reticle_pose = self._aim_reticle_point(reticle_arm)
+                if reticle_pose is None:
+                    continue
+                reticle_pixel = self._global_point_to_pixel(
+                    reticle_pose,
+                    header.frame_id,
+                    annotated.shape[1],
+                    annotated.shape[0],
+                )
+                if reticle_pixel is None:
+                    continue
+                if reticle_arm == arm:
+                    aim_pixel = reticle_pixel
+                reticle_color = (
+                    (255, 220, 30) if reticle_arm == "left" else (220, 40, 220)
+                )
+                reticle_actual_pixel = None
+                if self.actual[reticle_arm] is not None:
+                    reticle_actual_pixel = self._global_point_to_pixel(
+                        self.actual[reticle_arm].position,
                         header.frame_id,
                         annotated.shape[1],
                         annotated.shape[0],
                     )
-
-        if aim_pixel is not None:
-            aim_color = (255, 255, 0)
-            if actual_pixel is not None:
-                cv2.line(annotated, actual_pixel, aim_pixel, aim_color, 1, cv2.LINE_AA)
-            cv2.drawMarker(
-                annotated,
-                aim_pixel,
-                aim_color,
-                markerType=cv2.MARKER_TILTED_CROSS,
-                markerSize=24,
-                thickness=2,
-                line_type=cv2.LINE_AA,
-            )
-            cv2.circle(annotated, aim_pixel, 12, aim_color, 2, cv2.LINE_AA)
+                if reticle_actual_pixel is not None:
+                    cv2.line(
+                        annotated,
+                        reticle_actual_pixel,
+                        reticle_pixel,
+                        reticle_color,
+                        1,
+                        cv2.LINE_AA,
+                    )
+                cv2.drawMarker(
+                    annotated,
+                    reticle_pixel,
+                    reticle_color,
+                    markerType=cv2.MARKER_TILTED_CROSS,
+                    markerSize=24,
+                    thickness=2,
+                    line_type=cv2.LINE_AA,
+                )
+                cv2.circle(
+                    annotated,
+                    reticle_pixel,
+                    12,
+                    reticle_color,
+                    2,
+                    cv2.LINE_AA,
+                )
+                self._draw_image_label(
+                    annotated,
+                    reticle_arm[0].upper(),
+                    (reticle_pixel[0] + 14, max(24, reticle_pixel[1] - 12)),
+                    reticle_color,
+                )
 
         target_pixel = None
         if point is not None:
@@ -873,17 +1081,6 @@ class BimanualVisualCues(Node):
                 annotated.shape[1],
                 annotated.shape[0],
             )
-            if locked and actual_pixel is not None and target_pixel is not None:
-                guide_color = (40, 220, 40) if ready else (255, 210, 40)
-                cv2.arrowedLine(
-                    annotated,
-                    actual_pixel,
-                    target_pixel,
-                    guide_color,
-                    3,
-                    cv2.LINE_AA,
-                    tipLength=0.08,
-                )
             if target_pixel is not None:
                 color = (40, 220, 40) if ready else ((0, 190, 255) if not locked else (0, 150, 255))
                 cv2.drawMarker(
@@ -897,7 +1094,7 @@ class BimanualVisualCues(Node):
                 )
                 cv2.circle(annotated, target_pixel, 17, color, 2, cv2.LINE_AA)
                 if distance is not None:
-                    label = "GRASP" if ready else f"{distance * 100.0:.1f} cm"
+                    label = "CLOSE GRIPPER" if ready else f"{distance * 100.0:.1f} cm"
                     self._draw_image_label(
                         annotated,
                         label,
@@ -909,22 +1106,118 @@ class BimanualVisualCues(Node):
             cv2.circle(annotated, actual_pixel, 9, (245, 245, 245), 2, cv2.LINE_AA)
             cv2.circle(annotated, actual_pixel, 6, (0, 0, 255), -1, cv2.LINE_AA)
 
+        # The active arm keeps the detailed aiming overlay above. Also show the
+        # other arm's independently computed candidate/lock so a bimanual
+        # operator can confirm both grasp points without switching modes.
+        if self.bimanual_target_selection:
+            other_arm = "left" if arm == "right" else "right"
+            other_target = self.targets[other_arm]
+            other_candidate = self.candidates[other_arm]
+            other_point = other_target if other_target is not None else other_candidate
+            other_color = (255, 220, 30) if other_arm == "left" else (220, 40, 220)
+            if other_point is not None:
+                other_pixel = self._global_point_to_pixel(
+                    other_point,
+                    header.frame_id,
+                    annotated.shape[1],
+                    annotated.shape[0],
+                )
+                other_actual_pixel = None
+                if self.actual[other_arm] is not None:
+                    other_actual_pixel = self._global_point_to_pixel(
+                        self.actual[other_arm].position,
+                        header.frame_id,
+                        annotated.shape[1],
+                        annotated.shape[0],
+                    )
+                if other_pixel is not None:
+                    if other_target is not None and other_actual_pixel is not None:
+                        cv2.arrowedLine(
+                            annotated,
+                            other_actual_pixel,
+                            other_pixel,
+                            other_color,
+                            2,
+                            cv2.LINE_AA,
+                            tipLength=0.08,
+                        )
+                    cv2.drawMarker(
+                        annotated,
+                        other_pixel,
+                        other_color,
+                        markerType=cv2.MARKER_CROSS,
+                        markerSize=24,
+                        thickness=2,
+                        line_type=cv2.LINE_AA,
+                    )
+                    other_state = "LOCK" if other_target is not None else "AIM"
+                    self._draw_image_label(
+                        annotated,
+                        f"{other_arm[0].upper()} {other_state}",
+                        (other_pixel[0] + 16, max(28, other_pixel[1] - 14)),
+                        other_color,
+                    )
+
+        preview_visible = False
+        if self.show_untangle_preview:
+            for preview_arm, preview_color in (
+                ("left", (255, 220, 30)),
+                ("right", (220, 40, 220)),
+            ):
+                pixels = [
+                    self._global_point_to_pixel(
+                        preview_point,
+                        header.frame_id,
+                        annotated.shape[1],
+                        annotated.shape[0],
+                    )
+                    for preview_point in self.untangle_preview_paths[preview_arm]
+                ]
+                valid_pixels = [pixel for pixel in pixels if pixel is not None]
+                if len(valid_pixels) < 2:
+                    continue
+                preview_visible = True
+                for first, second in zip(pixels, pixels[1:]):
+                    if first is not None and second is not None:
+                        cv2.line(annotated, first, second, preview_color, 3, cv2.LINE_AA)
+                cv2.circle(annotated, valid_pixels[-1], 8, preview_color, 2, cv2.LINE_AA)
+
         if ready:
-            status = f"GRASP - target within {self.ready_distance * 100.0:.1f} cm"
+            status = "CLOSE GRIPPER"
             status_color = (40, 220, 40)
         elif locked and distance is not None:
-            status = f"APPROACH - {distance * 100.0:.1f} cm"
+            status = f"AUTO APPROACH - {distance * 100.0:.1f} cm"
             status_color = (0, 150, 255)
         elif candidate is not None:
-            status = f"AIM - close gripper {self.gesture_counts[arm]}/{self.lock_close_count}"
+            if self.target_selection_mode == "nearest_tcp":
+                status = "TARGET FOUND - HOLD OPEN"
+            else:
+                status = f"AIM - close gripper {self.gesture_counts[arm]}/{self.lock_close_count}"
             status_color = (0, 190, 255)
-        elif self.use_aim_reticle_as_fallback_target and reticle_point is not None:
+        elif (
+            self.target_selection_mode == "ray"
+            and self.use_aim_reticle_as_fallback_target
+            and reticle_point is not None
+        ):
             status = f"AIM* - close gripper {self.gesture_counts[arm]}/{self.lock_close_count}"
             status_color = (255, 255, 0)
+        elif self.target_selection_mode == "nearest_tcp":
+            if self.gripper_states[arm] == "open":
+                status = f"SEARCHING WITHIN {self.nearest_target_radius * 100.0:.0f} CM"
+            else:
+                status = "OPEN GRIPPER TO SEARCH"
+            status_color = (170, 170, 170)
         else:
             status = "SEARCHING"
             status_color = (170, 170, 170)
         self._draw_image_label(annotated, status, (18, 34), status_color)
+        if preview_visible:
+            self._draw_image_label(
+                annotated,
+                "SIM PREVIEW - NOT EXECUTED",
+                (18, 68),
+                (0, 220, 255),
+            )
         return annotated
 
     def _aim_reticle_point(self, arm: str) -> np.ndarray | None:
@@ -1051,10 +1344,17 @@ class BimanualVisualCues(Node):
         if current == previous:
             return
         self.gripper_states[arm] = current
+        if current == "open":
+            self.auto_candidate_start_times[arm] = None
         if current != "closed" or previous != "open":
             return
         if self.targets[arm] is not None:
             self._handle_locked_target_grasp_event(arm)
+            return
+        if self.target_selection_mode == "nearest_tcp":
+            self.candidates[arm] = None
+            self.last_candidate_times[arm] = None
+            self.auto_candidate_start_times[arm] = None
             return
         candidate = None
         if self.prefer_aim_reticle_target and self.use_aim_reticle_as_fallback_target:
@@ -1109,6 +1409,28 @@ class BimanualVisualCues(Node):
         points = self._pointcloud_points_in_global(self.latest_pointcloud)
         if points.shape[0] == 0:
             return None
+        return self._scene_point_under_aim_reticle_from_points(arm, points)
+
+    def _scene_point_under_aim_reticle_from_points(
+        self,
+        arm: str,
+        points: np.ndarray,
+    ) -> np.ndarray | None:
+        if self.color_camera_info is None or points.shape[0] == 0:
+            return None
+        reticle_point = self._aim_reticle_point(arm)
+        if reticle_point is None:
+            return None
+        width = max(int(self.color_camera_info.width), 1)
+        height = max(int(self.color_camera_info.height), 1)
+        reticle_pixel = self._global_point_to_pixel(
+            reticle_point,
+            self.color_camera_info.header.frame_id,
+            width,
+            height,
+        )
+        if reticle_pixel is None:
+            return None
         pixels, valid = self._global_points_to_pixels(points, width, height)
         if pixels.shape[0] == 0:
             return None
@@ -1138,8 +1460,8 @@ class BimanualVisualCues(Node):
             f"{arm} grasp trigger: TCP-target distance={distance * 100.0:.1f} cm "
             f"({'ready' if ready else 'too far'}; threshold={self.ready_distance * 100.0:.1f} cm)"
         )
-        if ready:
-            self._unlock_target(arm, "grasp completed")
+        reason = "grasp completed" if ready else "gripper closed; assisted target cancelled"
+        self._unlock_target(arm, reason)
 
     def _clearance_cb(self, arm: str, msg: Float32) -> None:
         value = float(msg.data)
@@ -1171,6 +1493,7 @@ class BimanualVisualCues(Node):
         self.target_bboxes = {"left": None, "right": None}
         self.candidates = {"left": None, "right": None}
         self.last_candidate_times = {"left": None, "right": None}
+        self.auto_candidate_start_times = {"left": None, "right": None}
         self.gesture_counts = {"left": 0, "right": 0}
         self.last_gesture_times = {"left": None, "right": None}
         self.last_grasp_trigger_distances = {"left": None, "right": None}
@@ -1187,6 +1510,7 @@ class BimanualVisualCues(Node):
         return response
 
     def _timer_cb(self) -> None:
+        self._sync_assisted_grasp_enabled()
         self._update_actual_poses()
         self._update_ray_candidate()
         stamp = self.get_clock().now().to_msg()
@@ -1244,6 +1568,16 @@ class BimanualVisualCues(Node):
                     stamp,
                     base_id + 60,
                 )
+            if (
+                self.show_rviz_untangle_preview
+                and self.untangle_preview_paths[arm]
+            ):
+                self._append_untangle_preview_cue(
+                    markers,
+                    arm,
+                    stamp,
+                    base_id + 80,
+                )
 
         if self.show_robot_self_filter:
             self._append_robot_self_filter_cues(markers, stamp)
@@ -1251,9 +1585,81 @@ class BimanualVisualCues(Node):
         self.marker_pub.publish(markers)
         self._publish_target_feedback()
 
-    def _lock_target(self, arm: str, position: np.ndarray) -> None:
+    def _sync_assisted_grasp_enabled(self) -> None:
+        enabled = bool(self.get_parameter("assisted_grasp_enabled").value)
+        if enabled == self.assisted_grasp_enabled:
+            return
+        self.assisted_grasp_enabled = enabled
+        if enabled:
+            self.get_logger().info("Assisted grasp enabled.")
+            return
+
+        for arm in ("left", "right"):
+            self.targets[arm] = None
+            self.target_lock_origins[arm] = None
+            self.target_bboxes[arm] = None
+            self.candidates[arm] = None
+            self.last_candidate_times[arm] = None
+            self.auto_candidate_start_times[arm] = None
+            self.assist_active[arm] = False
+            self.assist_alpha[arm] = 0.0
+            self.assist_start_times[arm] = None
+        self.untangle_mode = False
+        self._publish_empty_target_roi()
+        self._publish_mode_state()
+        self.get_logger().info("Assisted grasp disabled; all targets cleared.")
+
+    def _append_untangle_preview_cue(
+        self,
+        array: MarkerArray,
+        arm: str,
+        stamp,
+        marker_id: int,
+    ) -> None:
+        points = self.untangle_preview_paths[arm]
+        if len(points) < 2:
+            return
+        color = CYAN if arm == "left" else MAGENTA
+        path = self._base_marker(f"{arm}_untangle_preview", marker_id, Marker.LINE_STRIP, stamp)
+        path.points = [self._point(point) for point in points]
+        path.scale.x = self.untangle_preview_path_width
+        self._set_color(path, color)
+        array.markers.append(path)
+        array.markers.append(
+            self._arrow_marker(
+                f"{arm}_untangle_preview",
+                marker_id + 1,
+                points[-2],
+                points[-1],
+                color,
+                stamp,
+                self.untangle_preview_path_width * 1.5,
+                self.untangle_preview_path_width * 3.0,
+            )
+        )
+        label_position = points[0] + np.array([0.0, 0.0, 0.06])
+        array.markers.append(
+            self._text_marker(
+                f"{arm}_untangle_preview",
+                marker_id + 2,
+                label_position,
+                f"{arm.upper()} PREVIEW ONLY",
+                color,
+                stamp,
+                0.045,
+            )
+        )
+
+    def _lock_target(
+        self,
+        arm: str,
+        position: np.ndarray,
+        *,
+        apply_lock_offset: bool = True,
+    ) -> None:
         raw_target = np.asarray(position, dtype=float).reshape(3)
-        target = raw_target + self.target_lock_offset
+        applied_offset = self.target_lock_offset if apply_lock_offset else np.zeros(3)
+        target = raw_target + applied_offset
         self.targets[arm] = target
         self.target_lock_origins[arm] = target.copy()
         self.target_bboxes[arm] = None
@@ -1262,6 +1668,7 @@ class BimanualVisualCues(Node):
         self.last_gesture_times[arm] = None
         self.last_grasp_trigger_distances[arm] = None
         self.last_grasp_trigger_ready[arm] = None
+        self.auto_candidate_start_times[arm] = None
         self.untangle_mode = True
         self.target_drift_start_times[arm] = None
         self.assist_active[arm] = False
@@ -1273,7 +1680,7 @@ class BimanualVisualCues(Node):
             f"Locked {arm} target at "
             f"[{target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}] "
             f"from raw [{raw_target[0]:.3f}, {raw_target[1]:.3f}, {raw_target[2]:.3f}] "
-            f"with world offset {np.array2string(self.target_lock_offset, precision=3)}; "
+            f"with world offset {np.array2string(applied_offset, precision=3)}; "
             "untangle mode enabled."
         )
 
@@ -1289,6 +1696,7 @@ class BimanualVisualCues(Node):
         self.assist_active[arm] = False
         self.assist_alpha[arm] = 0.0
         self.assist_start_times[arm] = None
+        self.auto_candidate_start_times[arm] = None
         if candidate is not None:
             self.candidates[arm] = np.asarray(candidate, dtype=float).reshape(3).copy()
             self.last_candidate_times[arm] = self.get_clock().now()
@@ -1313,7 +1721,7 @@ class BimanualVisualCues(Node):
             distance = float(np.linalg.norm(target - actual.position))
             self.target_distance_pub.publish(Float32(data=distance))
             ready = distance < self.ready_distance
-            state = "ready_to_grasp" if ready else "target_locked"
+            state = "close_gripper" if ready else "auto_approach"
             detail = f"{arm}:{state}:distance={distance:.4f}"
         elif self.candidates[arm] is not None:
             detail = (
@@ -1425,19 +1833,20 @@ class BimanualVisualCues(Node):
             self.right_assisted_pose_pub.publish(message)
 
     def _update_ray_candidate(self) -> None:
-        if not self.ray_selection_enabled:
+        if not self.assisted_grasp_enabled or not self.ray_selection_enabled:
             return
-        arm = self.active_arm
-        actual = self.actual[arm]
-        if actual is None or self.latest_pointcloud is None or self.latest_pointcloud_time is None:
-            if self.targets[arm] is None:
-                self._expire_ray_candidate(arm)
+        arms = ("left", "right") if self.bimanual_target_selection else (self.active_arm,)
+        if self.latest_pointcloud is None or self.latest_pointcloud_time is None:
+            for arm in arms:
+                if self.targets[arm] is None:
+                    self._expire_ray_candidate(arm)
             return
         now = self.get_clock().now()
         cloud_age = (now - self.latest_pointcloud_time).nanoseconds * 1e-9
         if cloud_age > self.pointcloud_timeout_s:
-            if self.targets[arm] is None:
-                self._expire_ray_candidate(arm)
+            for arm in arms:
+                if self.targets[arm] is None:
+                    self._expire_ray_candidate(arm)
             return
         if self.last_ray_update_time is not None:
             update_age = (now - self.last_ray_update_time).nanoseconds * 1e-9
@@ -1447,14 +1856,33 @@ class BimanualVisualCues(Node):
 
         points = self._pointcloud_points_in_global(self.latest_pointcloud)
         if points.shape[0] == 0:
+            for arm in arms:
+                if self.targets[arm] is None:
+                    self._expire_ray_candidate(arm)
+            return
+
+        for arm in arms:
+            self._update_arm_ray_candidate(arm, points, now)
+
+    def _update_arm_ray_candidate(
+        self,
+        arm: str,
+        points: np.ndarray,
+        now,
+    ) -> None:
+        actual = self.actual[arm]
+        if actual is None:
             if self.targets[arm] is None:
                 self._expire_ray_candidate(arm)
             return
         if self.targets[arm] is not None:
             self._track_locked_target_from_points(arm, points, now)
             return
+        if self.target_selection_mode == "nearest_tcp":
+            self._update_nearest_tcp_candidate(arm, points, now)
+            return
         if self.prefer_aim_reticle_target and self.use_aim_reticle_as_fallback_target:
-            candidate = self._scene_point_under_aim_reticle(arm)
+            candidate = self._scene_point_under_aim_reticle_from_points(arm, points)
         else:
             direction = actual.rotation @ self.ray_axis
             direction_norm = float(np.linalg.norm(direction))
@@ -1474,6 +1902,113 @@ class BimanualVisualCues(Node):
             alpha = self.candidate_ema_alpha
             self.candidates[arm] = (1.0 - alpha) * previous + alpha * candidate
         self.last_candidate_times[arm] = now
+
+    def _update_nearest_tcp_candidate(
+        self,
+        arm: str,
+        points: np.ndarray,
+        now,
+    ) -> None:
+        if self.gripper_states[arm] != "open":
+            self.candidates[arm] = None
+            self.last_candidate_times[arm] = None
+            self.auto_candidate_start_times[arm] = None
+            return
+
+        candidate = self._nearest_tcp_scene_point(arm, points)
+        if candidate is None:
+            self._expire_ray_candidate(arm)
+            self.auto_candidate_start_times[arm] = None
+            return
+
+        previous = self.candidates[arm]
+        if (
+            previous is None
+            or float(np.linalg.norm(candidate - previous)) > self.nearest_target_max_jitter
+        ):
+            self.candidates[arm] = candidate
+            self.auto_candidate_start_times[arm] = now
+        else:
+            alpha = self.candidate_ema_alpha
+            self.candidates[arm] = (1.0 - alpha) * previous + alpha * candidate
+            if self.auto_candidate_start_times[arm] is None:
+                self.auto_candidate_start_times[arm] = now
+        self.last_candidate_times[arm] = now
+
+        stable_since = self.auto_candidate_start_times[arm]
+        if stable_since is None:
+            return
+        stable_age = (now - stable_since).nanoseconds * 1e-9
+        if stable_age >= self.nearest_target_lock_delay_s:
+            locked_target = self.candidates[arm]
+            if locked_target is not None:
+                self._lock_target(
+                    arm,
+                    locked_target,
+                    apply_lock_offset=False,
+                )
+
+    def _nearest_tcp_scene_point(
+        self,
+        arm: str,
+        points: np.ndarray,
+    ) -> np.ndarray | None:
+        actual = self.actual[arm]
+        if actual is None:
+            return None
+        scene_points = np.asarray(points, dtype=float).reshape(-1, 3)
+        if scene_points.shape[0] == 0:
+            return None
+
+        relative = scene_points - actual.position.reshape(1, 3)
+        distances = np.linalg.norm(relative, axis=1)
+        inside = distances >= self.nearest_target_min_distance
+        if self.nearest_target_forward_only:
+            direction = actual.rotation @ self.ray_axis
+            direction_norm = float(np.linalg.norm(direction))
+            if not np.isfinite(direction_norm) or direction_norm < 1e-9:
+                return None
+            direction /= direction_norm
+            axial = relative @ direction
+            radial = relative - axial.reshape(-1, 1) * direction.reshape(1, 3)
+            radial_distance = np.linalg.norm(radial, axis=1)
+            inside &= (
+                (axial >= self.nearest_target_min_forward_distance)
+                & (axial <= self.nearest_target_radius)
+                & (radial_distance <= self.nearest_target_lateral_radius)
+            )
+        else:
+            inside &= distances <= self.nearest_target_radius
+        scene_points = scene_points[inside]
+        if scene_points.shape[0] < self.nearest_target_min_points:
+            return None
+
+        scene_points = self._exclude_cable_capsule_points(scene_points)
+        scene_points = self._exclude_robot_self_points(
+            scene_points,
+            hand_radius_override=self.nearest_target_self_filter_hand_radius,
+            padding_override=self.nearest_target_self_filter_padding,
+            skip_hand_arm=arm,
+        )
+        if scene_points.shape[0] < self.nearest_target_min_points:
+            return None
+
+        distances = np.linalg.norm(
+            scene_points - actual.position.reshape(1, 3),
+            axis=1,
+        )
+        nearest_order = np.argsort(distances)
+        for index in nearest_order[: min(64, nearest_order.size)]:
+            candidate = scene_points[int(index)]
+            support_count = int(
+                np.count_nonzero(
+                    np.linalg.norm(scene_points - candidate.reshape(1, 3), axis=1)
+                    <= self.nearest_target_support_radius
+                )
+            )
+            if support_count >= self.nearest_target_min_points:
+                return candidate.copy()
+        return None
 
     def _track_locked_target_from_points(
         self,
@@ -1548,7 +2083,14 @@ class BimanualVisualCues(Node):
             keep &= ~inside
         return roi_points[keep]
 
-    def _exclude_robot_self_points(self, points: np.ndarray) -> np.ndarray:
+    def _exclude_robot_self_points(
+        self,
+        points: np.ndarray,
+        *,
+        hand_radius_override: float | None = None,
+        padding_override: float | None = None,
+        skip_hand_arm: str | None = None,
+    ) -> np.ndarray:
         roi_points = np.asarray(points, dtype=float).reshape(-1, 3)
         if not self.exclude_robot_points or roi_points.shape[0] == 0:
             return roi_points
@@ -1556,8 +2098,16 @@ class BimanualVisualCues(Node):
         if not segments:
             return roi_points
         keep = np.ones(roi_points.shape[0], dtype=bool)
-        padding = self.robot_self_filter_padding
-        for _arm, start, end, radius, _is_hand in segments:
+        padding = (
+            self.robot_self_filter_padding
+            if padding_override is None
+            else max(0.0, float(padding_override))
+        )
+        for segment_arm, start, end, radius, is_hand in segments:
+            if is_hand and segment_arm == skip_hand_arm:
+                continue
+            if is_hand and hand_radius_override is not None:
+                radius = max(0.005, float(hand_radius_override))
             segment = end - start
             length_squared = float(segment @ segment)
             if length_squared <= 1e-12:
@@ -1753,6 +2303,7 @@ class BimanualVisualCues(Node):
         if age > self.candidate_hold_s:
             self.candidates[arm] = None
             self.last_candidate_times[arm] = None
+            self.auto_candidate_start_times[arm] = None
 
     def _pointcloud_points_in_global(self, msg: PointCloud2) -> np.ndarray:
         total_points = int(msg.width) * int(msg.height)
@@ -2010,23 +2561,9 @@ class BimanualVisualCues(Node):
         self._set_color(target_marker, color)
         array.markers.append(target_marker)
 
-        if distance > 0.01:
-            array.markers.append(
-                self._arrow_marker(
-                    f"{arm}_target",
-                    base_id + 2,
-                    actual,
-                    target,
-                    color,
-                    stamp,
-                    shaft=0.012,
-                    head=0.025,
-                )
-            )
-
         if self.show_target_text:
             text_position = target + np.array([0.0, 0.0, 0.055])
-            state = "GRASP" if ready else f"{distance * 100.0:.1f} cm"
+            state = "CLOSE GRIPPER" if ready else f"{distance * 100.0:.1f} cm"
             array.markers.append(
                 self._text_marker(
                     f"{arm}_target",
