@@ -18,11 +18,26 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "disturbance_process_noise", default_value="1e-4"
             ),
+            DeclareLaunchArgument("residual_model_enabled", default_value="false"),
+            DeclareLaunchArgument(
+                "python_executable",
+                default_value="/home/wanghua/miniconda3/envs/ffs/bin/python",
+            ),
+            DeclareLaunchArgument(
+                "residual_model_monitor_only", default_value="true"
+            ),
+            DeclareLaunchArgument("residual_model_backend", default_value="torchscript"),
+            DeclareLaunchArgument("residual_model_device", default_value="cpu"),
+            DeclareLaunchArgument("residual_model_path", default_value=""),
+            DeclareLaunchArgument(
+                "residual_model_correction_gain", default_value="1.0"
+            ),
             Node(
                 package="openarmx_obstacle_avoidance",
                 executable="bimanual_modal_observer",
                 name="bimanual_modal_observer",
                 output="screen",
+                prefix=[LaunchConfiguration("python_executable")],
                 parameters=[
                     {
                         "imu_topic": LaunchConfiguration("imu_topic"),
@@ -37,6 +52,24 @@ def generate_launch_description():
                         ),
                         "disturbance_process_noise": LaunchConfiguration(
                             "disturbance_process_noise"
+                        ),
+                        "residual_model_enabled": LaunchConfiguration(
+                            "residual_model_enabled"
+                        ),
+                        "residual_model_monitor_only": LaunchConfiguration(
+                            "residual_model_monitor_only"
+                        ),
+                        "residual_model_backend": LaunchConfiguration(
+                            "residual_model_backend"
+                        ),
+                        "residual_model_device": LaunchConfiguration(
+                            "residual_model_device"
+                        ),
+                        "residual_model_path": LaunchConfiguration(
+                            "residual_model_path"
+                        ),
+                        "residual_model_correction_gain": LaunchConfiguration(
+                            "residual_model_correction_gain"
                         ),
                     }
                 ],

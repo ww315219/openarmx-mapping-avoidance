@@ -1,0 +1,389 @@
+{
+  "model_type": "physics_residual_attention_gru_ensemble",
+  "ensemble_size": 3,
+  "history_samples": 25,
+  "history_seconds": 0.5,
+  "hidden_size": 48,
+  "attention_size": 24,
+  "attention_strength": 0.35,
+  "input_contract": "[batch, history_samples, 24] raw physical units",
+  "output_contract": "[batch, 6] one-step modal-state residual",
+  "dataset": {
+    "format_version": 1,
+    "rate_hz": 50.0,
+    "feature_names": [
+      "state_roll_angle",
+      "state_roll_rate",
+      "state_yaw_angle",
+      "state_yaw_rate",
+      "state_slow_gyro_x",
+      "state_slow_gyro_z",
+      "position_openarmx_left_joint1",
+      "position_openarmx_left_joint2",
+      "position_openarmx_left_joint4",
+      "position_openarmx_right_joint1",
+      "position_openarmx_right_joint2",
+      "position_openarmx_right_joint4",
+      "velocity_openarmx_left_joint1",
+      "velocity_openarmx_left_joint2",
+      "velocity_openarmx_left_joint4",
+      "velocity_openarmx_right_joint1",
+      "velocity_openarmx_right_joint2",
+      "velocity_openarmx_right_joint4",
+      "acceleration_openarmx_left_joint1",
+      "acceleration_openarmx_left_joint2",
+      "acceleration_openarmx_left_joint4",
+      "acceleration_openarmx_right_joint1",
+      "acceleration_openarmx_right_joint2",
+      "acceleration_openarmx_right_joint4"
+    ],
+    "target_names": [
+      "roll_angle_residual",
+      "roll_rate_residual",
+      "yaw_angle_residual",
+      "yaw_rate_residual",
+      "slow_gyro_x_residual",
+      "slow_gyro_z_residual"
+    ],
+    "joint_names": [
+      "openarmx_left_joint1",
+      "openarmx_left_joint2",
+      "openarmx_left_joint4",
+      "openarmx_right_joint1",
+      "openarmx_right_joint2",
+      "openarmx_right_joint4"
+    ],
+    "nominal_model": {
+      "frequencies_hz": [
+        1.6846,
+        2.4155
+      ],
+      "damping_ratios": [
+        0.07918,
+        0.05082
+      ],
+      "coupling": [
+        [
+          0.23935252,
+          0.00220909,
+          -0.09528608,
+          -0.23503855,
+          -0.0006191,
+          -0.09961852
+        ],
+        [
+          0.00217554,
+          0.18233809,
+          -0.00085226,
+          0.01564604,
+          0.1729939,
+          0.00756648
+        ]
+      ],
+      "discrete_a": [
+        [
+          0.9779237669150221,
+          0.01952190561422433,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          -2.187134736121792,
+          0.9452014258877361,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.9547499770363752,
+          0.019393590864923895,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -4.467165573270498,
+          0.924833545038424,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.8819113782981763,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.8819113782981763
+        ]
+      ],
+      "discrete_b": [
+        [
+          4.7163893022055855e-05,
+          4.352963755555754e-07,
+          -1.8775914636750244e-05,
+          -4.631383462459108e-05,
+          -1.2199230728782293e-07,
+          -1.9629612507507887e-05
+        ],
+        [
+          0.004672617303966742,
+          4.312564647332683e-05,
+          -0.0018601658601094288,
+          -0.004588400388804147,
+          -1.2086011765766285e-05,
+          -0.0019447433448687187
+        ],
+        [
+          4.2737789564464246e-07,
+          3.5819736341351314e-05,
+          -1.674237593158953e-07,
+          3.0736146659550744e-06,
+          3.3984100012576046e-05,
+          1.4864108680315112e-06
+        ],
+        [
+          4.219153267027654e-05,
+          0.0035361903165516723,
+          -1.652838175054004e-05,
+          0.00030343289841623395,
+          0.003354972918727558,
+          0.00014674121740762937
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "sessions": [
+      {
+        "index": 0,
+        "scenario": "e4_right_natural_r1_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e4_natural_teleoperation/2026-08-12_21-45-50_wanghua_e4_right_natural_r1_clean",
+        "split": "train",
+        "samples": 4490
+      },
+      {
+        "index": 1,
+        "scenario": "e4_right_natural_r2_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e4_natural_teleoperation/2026-08-12_21-52-16_wanghua_e4_right_natural_r2_clean",
+        "split": "train",
+        "samples": 4490
+      },
+      {
+        "index": 2,
+        "scenario": "e4_right_natural_r3_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e4_natural_teleoperation/2026-08-12_21-54-27_wanghua_e4_right_natural_r3_clean",
+        "split": "validation",
+        "samples": 4489
+      },
+      {
+        "index": 3,
+        "scenario": "e5_left_natural_r1_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e5_natural_teleoperation/2026-08-12_22-04-25_wanghua_e5_left_natural_r1_clean",
+        "split": "train",
+        "samples": 4488
+      },
+      {
+        "index": 4,
+        "scenario": "e5_left_natural_r2_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e5_natural_teleoperation/2026-08-12_22-12-56_wanghua_e5_left_natural_r2_clean",
+        "split": "train",
+        "samples": 4488
+      },
+      {
+        "index": 5,
+        "scenario": "e5_left_natural_r3_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e5_natural_teleoperation/2026-08-12_22-17-58_wanghua_e5_left_natural_r3_clean",
+        "split": "validation",
+        "samples": 4491
+      },
+      {
+        "index": 6,
+        "scenario": "e6_bimanual_natural_r1_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e6_bimanual_natural_teleoperation/2026-08-14_14-03-13_wanghua_e6_bimanual_natural_r1_clean",
+        "split": "train",
+        "samples": 4488
+      },
+      {
+        "index": 7,
+        "scenario": "e6_bimanual_natural_r2_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e6_bimanual_natural_teleoperation/2026-08-14_14-07-37_wanghua_e6_bimanual_natural_r2_clean",
+        "split": "train",
+        "samples": 4488
+      },
+      {
+        "index": 8,
+        "scenario": "e6_bimanual_natural_r3_clean",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e6_bimanual_natural_teleoperation/2026-08-14_14-11-14_wanghua_e6_bimanual_natural_r3_clean",
+        "split": "validation",
+        "samples": 4482
+      },
+      {
+        "index": 9,
+        "scenario": "e7_strong_baseline_controlled_suite_2026-08-14_15-14-05_2026-08-14_15-14-10_baseline",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/controlled_suite_2026-08-14_15-14-05/e7_closed_loop_validation",
+        "split": "train",
+        "samples": 1775
+      },
+      {
+        "index": 10,
+        "scenario": "e7_strong_baseline_controlled_suite_2026-08-14_15-28-32_2026-08-14_15-28-36_baseline",
+        "path": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/controlled_suite_2026-08-14_15-28-32/e7_closed_loop_validation",
+        "split": "train",
+        "samples": 1770
+      }
+    ]
+  },
+  "normalization": {
+    "feature_mean": [
+      -2.0585623133229092e-05,
+      0.0001532237947685644,
+      -6.153518370410893e-06,
+      0.00010594109335215762,
+      0.00022729832562617958,
+      0.0001482831867178902,
+      -0.2950291037559509,
+      -0.17440785467624664,
+      0.2955234944820404,
+      0.3214743435382843,
+      0.15919943153858185,
+      0.27750757336616516,
+      -0.00012387083552312106,
+      -0.00017500903049949557,
+      -0.00027403392596170306,
+      -0.00022993770835455507,
+      8.237484871642664e-05,
+      9.603227226762101e-05,
+      -0.0071679395623505116,
+      -0.0007863061036914587,
+      -0.001316043664701283,
+      0.008483233861625195,
+      -0.00985088013112545,
+      -0.005413682200014591
+    ],
+    "feature_std": [
+      0.007962566800415516,
+      0.05859632417559624,
+      0.002872409066185355,
+      0.037392739206552505,
+      0.023853890597820282,
+      0.020665409043431282,
+      0.4729982912540436,
+      0.24073909223079681,
+      0.4395045340061188,
+      0.4964018166065216,
+      0.2481411099433899,
+      0.4253726303577423,
+      0.40930914878845215,
+      0.34490764141082764,
+      0.3254189193248749,
+      0.4143695533275604,
+      0.34671902656555176,
+      0.28628599643707275,
+      2.152967929840088,
+      1.8498506546020508,
+      1.8133054971694946,
+      2.0303947925567627,
+      1.7224105596542358,
+      1.575164794921875
+    ],
+    "target_mean": [
+      -2.790807002384099e-06,
+      2.2797703422838822e-05,
+      -1.98898078451748e-06,
+      1.4545628800988197e-05,
+      2.6659583454602398e-05,
+      1.7451297026127577e-05
+    ],
+    "target_std": [
+      0.002168967854231596,
+      0.021524885669350624,
+      0.0012898821150884032,
+      0.014850184321403503,
+      0.02109767682850361,
+      0.011987494304776192
+    ]
+  },
+  "metrics": {
+    "validation_windows": 13390,
+    "nominal_physics_rmse": {
+      "overall": 0.014026516117155552,
+      "per_state": {
+        "roll_angle_residual": 0.002132901456207037,
+        "roll_rate_residual": 0.02099737524986267,
+        "yaw_angle_residual": 0.001183844287879765,
+        "yaw_rate_residual": 0.013498564250767231,
+        "slow_gyro_x_residual": 0.020751632750034332,
+        "slow_gyro_z_residual": 0.010989579372107983
+      }
+    },
+    "linear_residual_rmse": {
+      "overall": 0.011786586487221333,
+      "per_state": {
+        "roll_angle_residual": 0.0017292074045429289,
+        "roll_rate_residual": 0.017593980990111703,
+        "yaw_angle_residual": 0.0010611162067632725,
+        "yaw_rate_residual": 0.011818513349834362,
+        "slow_gyro_x_residual": 0.01684170364945541,
+        "slow_gyro_z_residual": 0.009826351997338764
+      }
+    },
+    "gru_residual_rmse": {
+      "overall": 0.009368947707116604,
+      "per_state": {
+        "roll_angle_residual": 0.0013458593748509884,
+        "roll_rate_residual": 0.013738344423472881,
+        "yaw_angle_residual": 0.0008911837358027697,
+        "yaw_rate_residual": 0.009867198765277863,
+        "slow_gyro_x_residual": 0.013046534731984138,
+        "slow_gyro_z_residual": 0.008230444975197315
+      }
+    },
+    "gru_improvement_over_nominal_percent": 33.205454377529776,
+    "gru_improvement_over_linear_percent": 20.51178076643192
+  },
+  "arguments": {
+    "dataset": "experiment_data/cable_dynamics_residual/learning/cable_residual_dataset_attention.npz",
+    "output_dir": "experiment_data/cable_dynamics_residual/learning/models/cable_residual_attention_gru_2026-08-14_15-54-21",
+    "history_seconds": 0.5,
+    "hidden_size": 48,
+    "architecture": "attention_gru",
+    "attention_size": 24,
+    "attention_strength": 0.35,
+    "epochs": 120,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "weight_decay": 1e-05,
+    "patience": 15,
+    "ensemble_size": 3,
+    "seed": 42,
+    "device": "cuda"
+  }
+}

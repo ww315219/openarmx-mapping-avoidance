@@ -467,9 +467,21 @@ class DualModalInputShaper:
         ]
         self.previous_correction.fill(0.0)
 
-    def process(self, positions: np.ndarray) -> InputShaperResult:
+    def process(
+        self,
+        positions: np.ndarray,
+        strength_scales: np.ndarray | None = None,
+    ) -> InputShaperResult:
         positions = np.asarray(positions, dtype=float).reshape(3)
         modal_input = self.coupling @ positions
+        if strength_scales is None:
+            effective_strengths = self.strengths
+        else:
+            effective_strengths = self.strengths * np.clip(
+                np.asarray(strength_scales, dtype=float).reshape(2),
+                0.0,
+                1.0,
+            )
         if self.filter_state is None:
             self.reset(positions)
         modal_filtered = np.zeros(2, dtype=float)
@@ -482,7 +494,7 @@ class DualModalInputShaper:
             )
             modal_filtered[index] = output[0]
             self.filter_state[index] = state
-        modal_output = modal_input + self.strengths * (
+        modal_output = modal_input + effective_strengths * (
             modal_filtered - modal_input
         )
         correction = self.modal_to_joint @ (modal_output - modal_input)
@@ -913,6 +925,17 @@ class BimanualEsdfAvoidanceFilter(Node):
         self.declare_parameter("antisway_input_shaper_strengths", [0.45, 0.50])
         self.declare_parameter("antisway_input_shaper_max_correction", 0.02)
         self.declare_parameter("antisway_input_shaper_max_correction_rate", 0.12)
+        self.declare_parameter("antisway_gru_control_enabled", False)
+        self.declare_parameter(
+            "antisway_gru_prediction_topic",
+            "/openarmx/antisway/residual_predicted_state",
+        )
+        self.declare_parameter("antisway_gru_prediction_timeout_s", 0.20)
+        self.declare_parameter("antisway_gru_equivalent_speed_low", 0.03)
+        self.declare_parameter("antisway_gru_equivalent_speed_high", 0.18)
+        self.declare_parameter("antisway_gru_min_strength_scale", 0.20)
+        self.declare_parameter("antisway_gru_strength_rise_time_s", 0.12)
+        self.declare_parameter("antisway_gru_strength_fall_time_s", 0.35)
         self.declare_parameter("antisway_predictive_enabled", False)
         self.declare_parameter("antisway_horizon_steps", 12)
         self.declare_parameter("antisway_roll_weight", 20.0)
@@ -1514,6 +1537,36 @@ class BimanualEsdfAvoidanceFilter(Node):
         self.antisway_input_shaper_enabled = bool(
             self.get_parameter("antisway_input_shaper_enabled").value
         )
+        self.antisway_gru_control_enabled = bool(
+            self.get_parameter("antisway_gru_control_enabled").value
+        )
+        self.antisway_gru_prediction_timeout_s = max(
+            0.02,
+            float(self.get_parameter("antisway_gru_prediction_timeout_s").value),
+        )
+        self.antisway_gru_equivalent_speed_low = max(
+            0.0,
+            float(self.get_parameter("antisway_gru_equivalent_speed_low").value),
+        )
+        self.antisway_gru_equivalent_speed_high = max(
+            self.antisway_gru_equivalent_speed_low + 1e-6,
+            float(self.get_parameter("antisway_gru_equivalent_speed_high").value),
+        )
+        self.antisway_gru_min_strength_scale = float(
+            np.clip(
+                float(self.get_parameter("antisway_gru_min_strength_scale").value),
+                0.0,
+                1.0,
+            )
+        )
+        self.antisway_gru_strength_rise_time_s = max(
+            0.0,
+            float(self.get_parameter("antisway_gru_strength_rise_time_s").value),
+        )
+        self.antisway_gru_strength_fall_time_s = max(
+            0.0,
+            float(self.get_parameter("antisway_gru_strength_fall_time_s").value),
+        )
         self.antisway_horizon_steps = max(
             2,
             int(self.get_parameter("antisway_horizon_steps").value),
@@ -2026,6 +2079,11 @@ class BimanualEsdfAvoidanceFilter(Node):
         self.cbf_safe_baseline_catchup_active = {"left": False, "right": False}
         self.antisway_modal_state: np.ndarray | None = None
         self.antisway_modal_state_time = None
+        self.antisway_gru_prediction: np.ndarray | None = None
+        self.antisway_gru_prediction_time = None
+        self.antisway_gru_equivalent_speed = np.full(2, np.nan, dtype=float)
+        self.antisway_gru_strength_scale = np.ones(2, dtype=float)
+        self.antisway_gru_prediction_valid = False
         self.antisway_observer_valid = False
         self.antisway_observer_nis = float("nan")
         self.antisway_raw_confidence = 0.0
@@ -2215,6 +2273,12 @@ class BimanualEsdfAvoidanceFilter(Node):
             Float64MultiArray,
             str(self.get_parameter("antisway_modal_state_topic").value),
             self._antisway_modal_state_cb,
+            10,
+        )
+        self.create_subscription(
+            Float64MultiArray,
+            str(self.get_parameter("antisway_gru_prediction_topic").value),
+            self._antisway_gru_prediction_cb,
             10,
         )
         self.create_subscription(
@@ -2621,6 +2685,13 @@ class BimanualEsdfAvoidanceFilter(Node):
         self.antisway_modal_state = state
         self.antisway_modal_state_time = self.get_clock().now()
 
+    def _antisway_gru_prediction_cb(self, msg: Float64MultiArray) -> None:
+        state = np.asarray(msg.data, dtype=float)
+        if state.shape != (6,) or not np.all(np.isfinite(state)):
+            return
+        self.antisway_gru_prediction = state
+        self.antisway_gru_prediction_time = self.get_clock().now()
+
     def _antisway_observer_diagnostics_cb(self, msg: Float64MultiArray) -> None:
         if not msg.data:
             return
@@ -2826,6 +2897,9 @@ class BimanualEsdfAvoidanceFilter(Node):
 
     def _antisway_state_age(self) -> float:
         return self._age_from_receipt(self.antisway_modal_state_time)
+
+    def _antisway_gru_prediction_age(self) -> float:
+        return self._age_from_receipt(self.antisway_gru_prediction_time)
 
     def _antisway_raw_observer_confidence(self) -> tuple[bool, float]:
         sensor_ready = bool(
@@ -3333,7 +3407,11 @@ class BimanualEsdfAvoidanceFilter(Node):
             ],
             dtype=int,
         )
-        result = self.antisway_input_shaper.process(q_reference[modal_indices])
+        strength_scales = self._update_antisway_gru_strength_scale()
+        result = self.antisway_input_shaper.process(
+            q_reference[modal_indices],
+            strength_scales=strength_scales,
+        )
         self.antisway_shaper_modal_input = result.modal_input
         self.antisway_shaper_modal_output = result.modal_output
         self.antisway_shaper_correction = result.correction
@@ -3345,6 +3423,75 @@ class BimanualEsdfAvoidanceFilter(Node):
             np.linalg.norm(result.correction) > 1e-9
         )
         return self._clamp_bimanual(shaped_reference)
+
+    def _update_antisway_gru_strength_scale(self) -> np.ndarray:
+        if not self.antisway_gru_control_enabled:
+            self.antisway_gru_prediction_valid = False
+            self.antisway_gru_equivalent_speed.fill(np.nan)
+            self.antisway_gru_strength_scale.fill(1.0)
+            return self.antisway_gru_strength_scale.copy()
+
+        prediction_valid = bool(
+            self.antisway_gru_prediction is not None
+            and self._antisway_gru_prediction_age()
+            <= self.antisway_gru_prediction_timeout_s
+        )
+        self.antisway_gru_prediction_valid = prediction_valid
+        if prediction_valid:
+            state = self.antisway_gru_prediction
+            omega = 2.0 * np.pi * self.antisway_frequencies
+            equivalent_speed = np.asarray(
+                [
+                    np.hypot(state[1], omega[0] * state[0]),
+                    np.hypot(state[3], omega[1] * state[2]),
+                ],
+                dtype=float,
+            )
+            normalized = np.clip(
+                (
+                    equivalent_speed
+                    - self.antisway_gru_equivalent_speed_low
+                )
+                / (
+                    self.antisway_gru_equivalent_speed_high
+                    - self.antisway_gru_equivalent_speed_low
+                ),
+                0.0,
+                1.0,
+            )
+            activation = normalized * normalized * (3.0 - 2.0 * normalized)
+            target_scale = self.antisway_gru_min_strength_scale + (
+                1.0 - self.antisway_gru_min_strength_scale
+            ) * activation
+            self.antisway_gru_equivalent_speed = equivalent_speed
+        else:
+            # A stale predictor must not disable the fixed input shaper.
+            target_scale = np.ones(2, dtype=float)
+            self.antisway_gru_equivalent_speed.fill(np.nan)
+
+        dt = 1.0 / max(self.rate_hz, 1e-6)
+        rising = target_scale > self.antisway_gru_strength_scale
+        time_constants = np.where(
+            rising,
+            self.antisway_gru_strength_rise_time_s,
+            self.antisway_gru_strength_fall_time_s,
+        )
+        alpha = np.ones(2, dtype=float)
+        positive_tau = time_constants > 1e-9
+        alpha[positive_tau] = np.clip(
+            dt / time_constants[positive_tau],
+            0.0,
+            1.0,
+        )
+        self.antisway_gru_strength_scale += alpha * (
+            target_scale - self.antisway_gru_strength_scale
+        )
+        self.antisway_gru_strength_scale = np.clip(
+            self.antisway_gru_strength_scale,
+            0.0,
+            1.0,
+        )
+        return self.antisway_gru_strength_scale.copy()
 
     def _apply_predictive_antisway_reference(
         self,

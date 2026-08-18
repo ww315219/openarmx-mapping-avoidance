@@ -232,6 +232,22 @@ def generate_launch_description():
                 default_value="1e-4",
             ),
             DeclareLaunchArgument(
+                "antisway_residual_model_enabled", default_value="false"
+            ),
+            DeclareLaunchArgument(
+                "antisway_residual_model_monitor_only", default_value="true"
+            ),
+            DeclareLaunchArgument(
+                "antisway_residual_model_backend", default_value="torchscript"
+            ),
+            DeclareLaunchArgument(
+                "antisway_residual_model_device", default_value="cpu"
+            ),
+            DeclareLaunchArgument("antisway_residual_model_path", default_value=""),
+            DeclareLaunchArgument(
+                "antisway_residual_model_correction_gain", default_value="1.0"
+            ),
+            DeclareLaunchArgument(
                 "antisway_modal_state_topic",
                 default_value="/openarmx/antisway/modal_state",
             ),
@@ -288,6 +304,31 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "antisway_input_shaper_max_correction_rate",
                 default_value="0.12",
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_control_enabled", default_value="false"
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_prediction_topic",
+                default_value="/openarmx/antisway/residual_predicted_state",
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_prediction_timeout_s", default_value="0.20"
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_equivalent_speed_low", default_value="0.03"
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_equivalent_speed_high", default_value="0.18"
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_min_strength_scale", default_value="0.20"
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_strength_rise_time_s", default_value="0.12"
+            ),
+            DeclareLaunchArgument(
+                "antisway_gru_strength_fall_time_s", default_value="0.35"
             ),
             DeclareLaunchArgument("antisway_predictive_enabled", default_value="false"),
             DeclareLaunchArgument("antisway_horizon_steps", default_value="12"),
@@ -423,6 +464,24 @@ def generate_launch_description():
                         ),
                         "disturbance_process_noise": LaunchConfiguration(
                             "antisway_observer_disturbance_process_noise"
+                        ),
+                        "residual_model_enabled": LaunchConfiguration(
+                            "antisway_residual_model_enabled"
+                        ),
+                        "residual_model_monitor_only": LaunchConfiguration(
+                            "antisway_residual_model_monitor_only"
+                        ),
+                        "residual_model_backend": LaunchConfiguration(
+                            "antisway_residual_model_backend"
+                        ),
+                        "residual_model_device": LaunchConfiguration(
+                            "antisway_residual_model_device"
+                        ),
+                        "residual_model_path": LaunchConfiguration(
+                            "antisway_residual_model_path"
+                        ),
+                        "residual_model_correction_gain": LaunchConfiguration(
+                            "antisway_residual_model_correction_gain"
                         ),
                     }
                 ],
@@ -737,6 +796,30 @@ def generate_launch_description():
                         ),
                         "antisway_input_shaper_max_correction_rate": LaunchConfiguration(
                             "antisway_input_shaper_max_correction_rate"
+                        ),
+                        "antisway_gru_control_enabled": LaunchConfiguration(
+                            "antisway_gru_control_enabled"
+                        ),
+                        "antisway_gru_prediction_topic": LaunchConfiguration(
+                            "antisway_gru_prediction_topic"
+                        ),
+                        "antisway_gru_prediction_timeout_s": LaunchConfiguration(
+                            "antisway_gru_prediction_timeout_s"
+                        ),
+                        "antisway_gru_equivalent_speed_low": LaunchConfiguration(
+                            "antisway_gru_equivalent_speed_low"
+                        ),
+                        "antisway_gru_equivalent_speed_high": LaunchConfiguration(
+                            "antisway_gru_equivalent_speed_high"
+                        ),
+                        "antisway_gru_min_strength_scale": LaunchConfiguration(
+                            "antisway_gru_min_strength_scale"
+                        ),
+                        "antisway_gru_strength_rise_time_s": LaunchConfiguration(
+                            "antisway_gru_strength_rise_time_s"
+                        ),
+                        "antisway_gru_strength_fall_time_s": LaunchConfiguration(
+                            "antisway_gru_strength_fall_time_s"
                         ),
                         "antisway_predictive_enabled": LaunchConfiguration(
                             "antisway_predictive_enabled"

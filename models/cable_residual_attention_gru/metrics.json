@@ -1,0 +1,38 @@
+{
+  "validation_windows": 13390,
+  "nominal_physics_rmse": {
+    "overall": 0.014026516117155552,
+    "per_state": {
+      "roll_angle_residual": 0.002132901456207037,
+      "roll_rate_residual": 0.02099737524986267,
+      "yaw_angle_residual": 0.001183844287879765,
+      "yaw_rate_residual": 0.013498564250767231,
+      "slow_gyro_x_residual": 0.020751632750034332,
+      "slow_gyro_z_residual": 0.010989579372107983
+    }
+  },
+  "linear_residual_rmse": {
+    "overall": 0.011786586487221333,
+    "per_state": {
+      "roll_angle_residual": 0.0017292074045429289,
+      "roll_rate_residual": 0.017593980990111703,
+      "yaw_angle_residual": 0.0010611162067632725,
+      "yaw_rate_residual": 0.011818513349834362,
+      "slow_gyro_x_residual": 0.01684170364945541,
+      "slow_gyro_z_residual": 0.009826351997338764
+    }
+  },
+  "gru_residual_rmse": {
+    "overall": 0.009368947707116604,
+    "per_state": {
+      "roll_angle_residual": 0.0013458593748509884,
+      "roll_rate_residual": 0.013738344423472881,
+      "yaw_angle_residual": 0.0008911837358027697,
+      "yaw_rate_residual": 0.009867198765277863,
+      "slow_gyro_x_residual": 0.013046534731984138,
+      "slow_gyro_z_residual": 0.008230444975197315
+    }
+  },
+  "gru_improvement_over_nominal_percent": 33.205454377529776,
+  "gru_improvement_over_linear_percent": 20.51178076643192
+}

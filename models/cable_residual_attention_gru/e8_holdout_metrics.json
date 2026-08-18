@@ -1,0 +1,77 @@
+{
+  "model_dir": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/learning/models/cable_residual_attention_gru_2026-08-14_15-54-21",
+  "e8_dir": "/home/wanghua/openarmx_robotstride_ws\u2011cc/experiment_data/cable_dynamics_residual/e8_holdout_pairs_2026-08-14_21-10-51",
+  "architecture": "physics_residual_attention_gru_ensemble",
+  "history_seconds": 0.5,
+  "history_samples": 25,
+  "parameter_count_per_member": 14502,
+  "ensemble_size": 3,
+  "windows": 3145,
+  "nominal_physics_rmse": {
+    "overall": 0.003819218371063471,
+    "per_state": {
+      "roll_angle_residual": 0.0005225185886956751,
+      "roll_rate_residual": 0.0052701556123793125,
+      "yaw_angle_residual": 0.0004027734394185245,
+      "yaw_rate_residual": 0.00443328358232975,
+      "slow_gyro_x_residual": 0.005081964656710625,
+      "slow_gyro_z_residual": 0.0037186534609645605
+    }
+  },
+  "hybrid_rmse": {
+    "overall": 0.0033340766094624996,
+    "per_state": {
+      "roll_angle_residual": 0.00042540443246252835,
+      "roll_rate_residual": 0.004735545255243778,
+      "yaw_angle_residual": 0.0003378347319085151,
+      "yaw_rate_residual": 0.004091395530849695,
+      "slow_gyro_x_residual": 0.004177471622824669,
+      "slow_gyro_z_residual": 0.003128117648884654
+    }
+  },
+  "improvement_over_nominal_percent": 12.70264526576107,
+  "sessions": [
+    {
+      "bag": "2026-08-14_21-11-01_baseline",
+      "windows": 524,
+      "nominal_rmse": 0.0036543887108564377,
+      "hybrid_rmse": 0.0032374123111367226,
+      "improvement_percent": 11.410291370509217
+    },
+    {
+      "bag": "2026-08-14_21-12-04_shaped",
+      "windows": 524,
+      "nominal_rmse": 0.003565783379599452,
+      "hybrid_rmse": 0.003243193728849292,
+      "improvement_percent": 9.046810094964242
+    },
+    {
+      "bag": "2026-08-14_21-13-07_shaped",
+      "windows": 523,
+      "nominal_rmse": 0.004253247287124395,
+      "hybrid_rmse": 0.00355683546513319,
+      "improvement_percent": 16.373649942701697
+    },
+    {
+      "bag": "2026-08-14_21-14-10_baseline",
+      "windows": 525,
+      "nominal_rmse": 0.0038679405115544796,
+      "hybrid_rmse": 0.003359349211677909,
+      "improvement_percent": 13.148891467107227
+    },
+    {
+      "bag": "2026-08-14_21-15-13_baseline",
+      "windows": 524,
+      "nominal_rmse": 0.0039062327705323696,
+      "hybrid_rmse": 0.003380982670933008,
+      "improvement_percent": 13.446461858640768
+    },
+    {
+      "bag": "2026-08-14_21-16-16_shaped",
+      "windows": 525,
+      "nominal_rmse": 0.0036260434426367283,
+      "hybrid_rmse": 0.003214653581380844,
+      "improvement_percent": 11.345420091181701
+    }
+  ]
+}

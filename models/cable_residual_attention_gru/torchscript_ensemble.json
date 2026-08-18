@@ -1,0 +1,10 @@
+{
+  "format_version": 1,
+  "backend": "torchscript",
+  "models": [
+    "residual_gru_seed_42.pt",
+    "residual_gru_seed_43.pt",
+    "residual_gru_seed_44.pt"
+  ],
+  "metadata": "model_metadata.json"
+}

@@ -19,6 +19,8 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu, JointState
 from std_msgs.msg import Bool, Float64MultiArray, String
 
+from .numpy_residual_gru import NumpyResidualGRUEnsemble
+
 try:
     from scipy.linalg import expm
 except ImportError:  # pragma: no cover - reported clearly at runtime
@@ -113,8 +115,15 @@ class ModalKalmanFilter:
         self.innovation.fill(0.0)
         self.normalized_innovation_squared = 0.0
 
-    def update(self, acceleration: np.ndarray, modal_rates: np.ndarray) -> np.ndarray:
+    def update(
+        self,
+        acceleration: np.ndarray,
+        modal_rates: np.ndarray,
+        prediction_residual: np.ndarray | None = None,
+    ) -> np.ndarray:
         predicted_state = self.a @ self.state + self.b @ acceleration
+        if prediction_residual is not None:
+            predicted_state += np.asarray(prediction_residual, dtype=float)
         predicted_covariance = self.a @ self.covariance @ self.a.T + self.q
         innovation = modal_rates - self.c @ predicted_state
         innovation_covariance = (
@@ -185,6 +194,20 @@ class BimanualModalObserver(Node):
         )
         self.declare_parameter(
             "status_topic", "/openarmx/antisway/observer_status"
+        )
+        self.declare_parameter("residual_model_enabled", False)
+        self.declare_parameter("residual_model_monitor_only", True)
+        self.declare_parameter("residual_model_backend", "numpy")
+        self.declare_parameter("residual_model_device", "cpu")
+        self.declare_parameter("residual_model_path", "")
+        self.declare_parameter("residual_model_correction_gain", 1.0)
+        self.declare_parameter(
+            "residual_prediction_topic",
+            "/openarmx/antisway/residual_predicted_state",
+        )
+        self.declare_parameter(
+            "residual_diagnostics_topic",
+            "/openarmx/antisway/residual_diagnostics",
         )
 
         self.imu_topic = str(self.get_parameter("imu_topic").value)
@@ -272,6 +295,81 @@ class BimanualModalObserver(Node):
             max(1e-9, float(self.get_parameter("measurement_noise").value)),
         )
 
+        self.residual_model_enabled = bool(
+            self.get_parameter("residual_model_enabled").value
+        )
+        self.residual_model_monitor_only = bool(
+            self.get_parameter("residual_model_monitor_only").value
+        )
+        self.residual_model_correction_gain = float(
+            np.clip(
+                float(
+                    self.get_parameter("residual_model_correction_gain").value
+                ),
+                0.0,
+                1.0,
+            )
+        )
+        self.residual_model = None
+        self.residual_model_backend = str(
+            self.get_parameter("residual_model_backend").value
+        ).strip().lower()
+        self.residual_model_device = str(
+            self.get_parameter("residual_model_device").value
+        ).strip().lower()
+        self.residual_model_a = None
+        self.residual_model_b = None
+        self.residual_feature_history = None
+        self.residual_model_period = None
+        self.last_residual_model_time = None
+        self.pending_prediction_residual = None
+        self.latest_residual_mean = None
+        self.latest_residual_std = None
+        if self.residual_model_enabled:
+            residual_model_path = str(
+                self.get_parameter("residual_model_path").value
+            ).strip()
+            if not residual_model_path:
+                raise RuntimeError(
+                    "residual_model_path is required when residual_model_enabled=true"
+                )
+            if self.residual_model_backend == "numpy":
+                self.residual_model = NumpyResidualGRUEnsemble(residual_model_path)
+            elif self.residual_model_backend == "torchscript":
+                from .torchscript_residual_gru import TorchScriptResidualGRUEnsemble
+
+                self.residual_model = TorchScriptResidualGRUEnsemble(
+                    residual_model_path,
+                    device=self.residual_model_device,
+                )
+            else:
+                raise RuntimeError(
+                    "residual_model_backend must be 'numpy' or 'torchscript'"
+                )
+            if self.residual_model.input_size != 24 or self.residual_model.output_size != 6:
+                raise RuntimeError(
+                    "Residual model must use the trained 24-input/6-output contract"
+                )
+            if (
+                not self.residual_model_monitor_only
+                and abs(self.rate_hz - self.residual_model.rate_hz) > 1e-6
+            ):
+                raise RuntimeError(
+                    "Active residual correction requires observer rate_hz to equal "
+                    f"the model rate ({self.residual_model.rate_hz:.1f} Hz)"
+                )
+            self.residual_model_a, self.residual_model_b = discretize_modal_model(
+                self.residual_model.rate_hz,
+                frequencies,
+                damping,
+                coupling,
+                disturbance_cutoff_hz,
+            )
+            self.residual_feature_history = deque(
+                maxlen=self.residual_model.history_samples
+            )
+            self.residual_model_period = 1.0 / self.residual_model.rate_hz
+
         history_length = max(20, int(math.ceil(self.rate_hz * 0.5)))
         self.joint_history: deque[tuple[float, np.ndarray]] = deque(
             maxlen=history_length
@@ -280,6 +378,10 @@ class BimanualModalObserver(Node):
             len(self.modal_joint_names),
             dtype=float,
         )
+        self.filtered_velocity = np.zeros(
+            len(self.modal_joint_names), dtype=float
+        )
+        self.latest_joint_position = None
         self.latest_gyro = None
         self.latest_imu_monotonic = None
         self.latest_joint_monotonic = None
@@ -323,6 +425,16 @@ class BimanualModalObserver(Node):
             str(self.get_parameter("status_topic").value),
             10,
         )
+        self.residual_prediction_pub = self.create_publisher(
+            Float64MultiArray,
+            str(self.get_parameter("residual_prediction_topic").value),
+            10,
+        )
+        self.residual_diagnostics_pub = self.create_publisher(
+            Float64MultiArray,
+            str(self.get_parameter("residual_diagnostics_topic").value),
+            10,
+        )
         self.timer = self.create_timer(1.0 / self.rate_hz, self._timer_cb)
         self.get_logger().info(
             "read-only modal observer: "
@@ -330,6 +442,16 @@ class BimanualModalObserver(Node):
             f"joints={self.modal_joint_names}, "
             f"slow_cutoff={self.disturbance_cutoff_hz:.2f}Hz"
         )
+        if self.residual_model is not None:
+            self.get_logger().info(
+                "residual GRU connected: "
+                f"ensemble={self.residual_model.ensemble_size}, "
+                f"history={self.residual_model.history_samples} samples, "
+                f"model_rate={self.residual_model.rate_hz:.1f}Hz, "
+                f"backend={self.residual_model_backend}, "
+                f"device={self.residual_model_device}, "
+                f"monitor_only={self.residual_model_monitor_only}"
+            )
         self.get_logger().info(
             f"Keep the platform still for {self.calibration_duration:.1f}s "
             "while gyro bias is calibrated."
@@ -375,11 +497,15 @@ class BimanualModalObserver(Node):
             return
         now = time.monotonic()
         self.joint_history.append((now, positions))
+        self.latest_joint_position = positions
         self.latest_joint_monotonic = now
 
-    def _estimate_joint_acceleration(self) -> np.ndarray:
+    def _estimate_joint_kinematics(self) -> tuple[np.ndarray, np.ndarray]:
         if len(self.joint_history) < 7:
-            return self.filtered_acceleration.copy()
+            return (
+                self.filtered_velocity.copy(),
+                self.filtered_acceleration.copy(),
+            )
         newest_time = self.joint_history[-1][0]
         samples = [
             sample
@@ -387,13 +513,17 @@ class BimanualModalObserver(Node):
             if sample[0] >= newest_time - self.acceleration_window
         ]
         if len(samples) < 7:
-            return self.filtered_acceleration.copy()
+            return (
+                self.filtered_velocity.copy(),
+                self.filtered_acceleration.copy(),
+            )
         times = np.asarray([sample[0] - newest_time for sample in samples])
         positions = np.asarray([sample[1] for sample in samples])
         design = np.column_stack(
             (times * times * times, times * times, times, np.ones_like(times))
         )
         coefficients = np.linalg.lstsq(design, positions, rcond=None)[0]
+        velocity = coefficients[2, :]
         acceleration = 2.0 * coefficients[1, :]
         acceleration = np.clip(
             acceleration,
@@ -403,7 +533,60 @@ class BimanualModalObserver(Node):
         self.filtered_acceleration += self.acceleration_alpha * (
             acceleration - self.filtered_acceleration
         )
-        return self.filtered_acceleration.copy()
+        self.filtered_velocity += self.acceleration_alpha * (
+            velocity - self.filtered_velocity
+        )
+        return (
+            self.filtered_velocity.copy(),
+            self.filtered_acceleration.copy(),
+        )
+
+    def _run_residual_model(
+        self,
+        now: float,
+        state: np.ndarray,
+        velocity: np.ndarray,
+        acceleration: np.ndarray,
+    ) -> None:
+        if self.residual_model is None:
+            return
+        if (
+            self.last_residual_model_time is not None
+            and now - self.last_residual_model_time
+            < self.residual_model_period * 0.8
+        ):
+            return
+        self.last_residual_model_time = now
+        feature = np.concatenate(
+            (state, self.latest_joint_position, velocity, acceleration)
+        )
+        self.residual_feature_history.append(feature)
+        if len(self.residual_feature_history) < self.residual_model.history_samples:
+            return
+        sequence = np.asarray(self.residual_feature_history, dtype=float)
+        residual_mean, residual_std = self.residual_model.predict(sequence)
+        physics_next = self.residual_model_a @ state
+        physics_next += self.residual_model_b @ acceleration
+        hybrid_next = physics_next + residual_mean
+        self.latest_residual_mean = residual_mean
+        self.latest_residual_std = residual_std
+        self.pending_prediction_residual = (
+            self.residual_model_correction_gain * residual_mean
+        )
+        self.residual_prediction_pub.publish(
+            Float64MultiArray(data=hybrid_next.tolist())
+        )
+        # Layout: residual mean[6], ensemble std[6], physics next[6], hybrid next[6].
+        self.residual_diagnostics_pub.publish(
+            Float64MultiArray(
+                data=[
+                    *residual_mean.tolist(),
+                    *residual_std.tolist(),
+                    *physics_next.tolist(),
+                    *hybrid_next.tolist(),
+                ]
+            )
+        )
 
     def _sensors_are_fresh(self, now: float) -> bool:
         return bool(
@@ -433,9 +616,20 @@ class BimanualModalObserver(Node):
             )
             return
 
-        acceleration = self._estimate_joint_acceleration()
+        velocity, acceleration = self._estimate_joint_kinematics()
         modal_rates = self.latest_gyro - self.gyro_bias
-        state = self.filter.update(acceleration, modal_rates)
+        prediction_residual = None
+        if (
+            self.residual_model is not None
+            and not self.residual_model_monitor_only
+            and self.pending_prediction_residual is not None
+        ):
+            prediction_residual = self.pending_prediction_residual
+            self.pending_prediction_residual = None
+        state = self.filter.update(
+            acceleration, modal_rates, prediction_residual
+        )
+        self._run_residual_model(now, state, velocity, acceleration)
         roll_omega = 2.0 * math.pi * self.frequencies[0]
         yaw_omega = 2.0 * math.pi * self.frequencies[1]
         roll_energy = 0.5 * (
@@ -492,6 +686,27 @@ class BimanualModalObserver(Node):
             "yaw_energy": yaw_energy,
             "innovation": self.filter.innovation.tolist() if valid else None,
             "nis": self.filter.normalized_innovation_squared if valid else None,
+            "residual_model": {
+                "enabled": self.residual_model is not None,
+                "backend": self.residual_model_backend,
+                "device": self.residual_model_device,
+                "monitor_only": self.residual_model_monitor_only,
+                "history_ready": bool(
+                    self.residual_feature_history is not None
+                    and len(self.residual_feature_history)
+                    == self.residual_feature_history.maxlen
+                ),
+                "mean": (
+                    self.latest_residual_mean.tolist()
+                    if self.latest_residual_mean is not None
+                    else None
+                ),
+                "std": (
+                    self.latest_residual_std.tolist()
+                    if self.latest_residual_std is not None
+                    else None
+                ),
+            },
         }
         self.status_pub.publish(String(data=json.dumps(payload, separators=(",", ":"))))
 

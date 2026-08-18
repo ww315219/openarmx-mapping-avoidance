@@ -27,6 +27,11 @@ The current bimanual controller filters baseline joint commands through:
 3. Velocity, acceleration, jerk, and command-delta shaping for smooth motion.
 4. Optional bimodal cable-sway observation and anti-sway input shaping.
 
+The anti-sway pipeline also supports a learned residual predictor. A physical
+dual-mode observer estimates cable motion, an Attention-GRU predicts the
+unmodelled residual, and the corrected prediction adaptively scales the two
+input-shaper modes. Stale model output falls back to the fixed input shaper.
+
 Fixed cable capsules can be loaded from
 `openarmx_nvblox_bringup/config/fixed_cable_capsules.yaml`, while the mapping
 pipeline continues updating non-cable scene objects.
@@ -80,3 +85,28 @@ ros2 launch openarmx_obstacle_avoidance \
 
 Review the launch-file topic defaults before connecting output topics to
 physical robot controllers.
+
+## Attention-GRU Anti-Sway
+
+A deployable three-model TorchScript ensemble is included in
+`models/cable_residual_attention_gru`. Enable physical-model plus learned
+residual prediction with:
+
+```bash
+MODEL_MANIFEST="$PWD/models/cable_residual_attention_gru/torchscript_ensemble.json"
+ros2 launch openarmx_obstacle_avoidance \
+  bimanual_esdf_avoidance_filter.launch.py \
+  avoidance_enabled:=false \
+  antisway_enabled:=true \
+  antisway_monitor_only:=false \
+  start_antisway_observer:=true \
+  antisway_residual_model_enabled:=true \
+  antisway_residual_model_monitor_only:=false \
+  antisway_residual_model_backend:=torchscript \
+  antisway_residual_model_path:="$MODEL_MANIFEST" \
+  antisway_gru_control_enabled:=true
+```
+
+The runtime requires PyTorch. Dataset preparation, GRU training, E8
+evaluation, and the attention ablation utilities are in `scripts/`. Raw
+experiment recordings are intentionally not committed.
